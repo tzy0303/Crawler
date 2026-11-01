@@ -108,7 +108,13 @@ async function fetchMails(env, { days, log }) {
     auth: { user: env.IMAP_USER, pass: env.IMAP_PASSWORD },
     logger: false,
   });
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (err) {
+    // imapflow 只會說 Command failed，把伺服器實際回應帶出來（不含帳密）
+    const detail = [err.serverResponseCode, err.responseText].filter(Boolean).join(' ');
+    throw new Error(`信箱登入失敗${detail ? `：${detail}` : `：${err.message}`}（請確認 IMAP_USER 是完整信箱、IMAP_PASSWORD 是應用程式密碼）`);
+  }
   try {
     let mailbox = env.IMAP_MAILBOX || 'INBOX';
     if (mailbox.toLowerCase() === 'all') {
