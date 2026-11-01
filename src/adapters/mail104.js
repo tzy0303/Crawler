@@ -105,7 +105,8 @@ async function fetchMails(env, { days, log }) {
     host: env.IMAP_HOST || 'imap.gmail.com',
     port: Number(env.IMAP_PORT || 993),
     secure: true,
-    auth: { user: env.IMAP_USER, pass: env.IMAP_PASSWORD },
+    // Secrets 貼上時常多帶空白或換行
+    auth: { user: String(env.IMAP_USER).trim(), pass: String(env.IMAP_PASSWORD).trim() },
     logger: false,
   });
   try {
