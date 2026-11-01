@@ -196,3 +196,26 @@ test('104 通知信：讀 mail 資料夾裡的 .eml', async () => {
     unlinkSync(new URL('job.eml', dir));
   }
 });
+
+test('BeClass 列表頁 403 → 改讀官方 RSS：只新增，已存在的不判斷修改', async () => {
+  const db = openDb(':memory:');
+  const list = fixture('beclass-list.html');
+  const detail = fixture('beclass-detail.html');
+  const okFetch = async (url) => (url.includes('ShowList') ? (url.endsWith('page=1') ? list : '<html></html>') : detail);
+  await runCrawl(db, beclass, { fetch: okFetch, log: () => {}, maxPages: 1, initialPages: 1 });
+  const existing = beclass.parseList(list).items[0];
+  const rss = `<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel>
+    <item><title><![CDATA[${existing.name}]]></title><link>https://www.beclass.com/m/rid=${existing.sourceId}</link><Date>2099-01-01</Date></item>
+    <item><title><![CDATA[ RSS 新活動 ]]></title><link>https://www.beclass.com/m/rid=abc123</link><Date>2026-12-01</Date></item>
+  </channel></rss>`;
+  const blocked = async (url) => {
+    if (url.endsWith('backend.php')) return rss;
+    throw new Error(`HTTP 403 ${url}`);
+  };
+  const r = await runCrawl(db, beclass, { fetch: blocked, log: () => {} });
+  assert.equal(r.newCount, 1);
+  assert.equal(r.updatedCount, 0);
+  const row = db.prepare("SELECT url, fields_json FROM events WHERE name = 'RSS 新活動'").get();
+  assert.equal(row.url, 'https://www.beclass.com/rid=abc123');
+  assert.equal(JSON.parse(row.fields_json)['活動日期'], '2026-12-01');
+});

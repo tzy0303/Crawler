@@ -23,11 +23,11 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
   const volatile = [...(adapter.volatileFields ?? []), ...DERIVED_FIELDS];
   log(`[${adapter.id}] run #${runId} 開始（${full ? '完整' : isFirstRun ? '首次' : '增量'}）`);
 
-  const record = (item, extra = {}) => {
+  const record = (item, extra = {}, partial = false) => {
     const fields = addDerivedFields({ ...item.fields, ...extra.fields });
     const result = upsertEvent(db, adapter.id,
       { name: item.name, url: item.url, sourceId: item.sourceId, fields, description: extra.description },
-      { runId, volatile });
+      { runId, volatile, partial });
     stats.seen++;
     if (result === 'new') {
       stats.newCount++;
@@ -60,7 +60,24 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
     for (let page = 1; page <= pageLimit; page++) {
       const listUrl = adapter.listUrl(page);
       if (!listUrl) break;
-      const { items, totalPages } = adapter.parseList(await fetch(listUrl, fetchOpts), listUrl);
+      let html;
+      try {
+        html = await fetch(listUrl, fetchOpts);
+      } catch (err) {
+        // 列表頁被擋（403）而網站有官方 RSS 之類的備援 → 改用備援，只新增不判斷修改
+        if (page !== 1 || !adapter.fallback || !/HTTP 403/.test(err.message)) throw err;
+        log(`[${adapter.id}] 列表頁被拒（403），改讀官方 RSS：${adapter.fallback.url}`);
+        const items = adapter.fallback.parse(await fetch(adapter.fallback.url, fetchOpts));
+        stats.pages = 1;
+        for (const item of items) {
+          const key = normalizeName(item.name);
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
+          record(item, {}, true);
+        }
+        break;
+      }
+      const { items, totalPages } = adapter.parseList(html, listUrl);
       stats.pages = page;
       // 沒有資料，或整頁都是這次已看過的（超過最後一頁時有些網站會重複顯示最後一頁）→ 結束
       if (!items.length || items.every((i) => seenKeys.has(normalizeName(i.name)))) break;

@@ -12,7 +12,7 @@ on:
         default: ''
   push:
     branches: [main]
-    paths: ['sites.json']  # 網頁新增/修改網站後立刻抓一次
+    paths: ['sites.json', 'config.json', 'src/**', 'public/**', '.github/workflows/**']  # 新增/修改網站或程式後立刻跑一次
 
 permissions:
   contents: write

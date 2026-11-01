@@ -38,6 +38,28 @@ export default {
     return { items, totalPages: total ? Number(total[1]) : null };
   },
 
+  /**
+   * 列表頁被擋（雲端主機 IP 常被 BeClass 回 403）時改讀官方 RSS（最新 200 筆）。
+   * RSS 沒有地點、類別，所以只用來新增，不拿來判斷修改（partial）。
+   */
+  fallback: {
+    url: `${BASE}/backend.php`,
+    parse(xml) {
+      const $ = cheerio.load(xml, { xml: true });
+      return $('item')
+        .map((_, el) => {
+          const $el = $(el);
+          const name = $el.find('title').text().trim();
+          const rid = $el.find('link').text().match(/rid=([0-9a-z]+)/i)?.[1];
+          if (!name || !rid) return null;
+          const date = $el.find('Date').text().trim();
+          return { name, url: `${BASE}/rid=${rid}`, sourceId: rid, fields: date ? { 活動日期: date } : {} };
+        })
+        .get()
+        .filter(Boolean);
+    },
+  },
+
   parseDetail(html) {
     const $ = cheerio.load(html);
     const fields = {};

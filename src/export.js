@@ -41,7 +41,8 @@ const copy = new DatabaseSync(dbOut);
 copy.exec('PRAGMA journal_mode = DELETE;');
 copy.close();
 
-const sites = loadSites(config).map((s) => ({
+// 雲端沒設定的來源（例如 104 通知信只在本機設信箱）不顯示
+const sites = loadSites(config).filter((s) => s.adapter.configured !== false).map((s) => ({
   id: s.adapter.id,
   name: s.adapter.name,
   baseUrl: s.adapter.baseUrl,

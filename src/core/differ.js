@@ -32,7 +32,7 @@ export function diffFields(oldFields, newFields, volatile = []) {
  *  存在且相同 → 只更新 last_seen_at 與變動欄位
  * @returns {'new'|'updated'|'same'}
  */
-export function upsertEvent(db, siteId, ev, { runId = null, volatile = [] } = {}) {
+export function upsertEvent(db, siteId, ev, { runId = null, volatile = [], partial = false } = {}) {
   const ts = now();
   const nameKey = normalizeName(ev.name);
   const hash = contentHash(ev.fields, ev.description, volatile);
@@ -49,6 +49,12 @@ export function upsertEvent(db, siteId, ev, { runId = null, volatile = [] } = {}
     ).run(siteId, ev.name, nameKey, ev.url ?? null, ev.sourceId ?? null, fieldsJson, ev.description ?? null,
       hash, ts, ts, ts, runId, runId);
     return 'new';
+  }
+
+  // partial：資料來源欄位不完整（例如 RSS），已存在的只記「有看到」，不判斷修改
+  if (partial) {
+    db.prepare('UPDATE events SET last_seen_at = ? WHERE id = ?').run(ts, existing.id);
+    return 'same';
   }
 
   if (existing.content_hash === hash) {
