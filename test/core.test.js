@@ -231,3 +231,34 @@ test('網站密碼：加密 → 正確密碼解得開、錯誤密碼失敗；資
   assert.deepEqual([...back], [...db]);
   await assert.rejects(() => decryptBytes(enc, '錯的'), /密碼錯誤/);
 });
+
+test('合併另一個資料庫的網站資料：整批取代該網站，id 重新編號不衝突', async () => {
+  const { mergeSitesFrom } = await import('../src/core/merge.js');
+  const dir = new URL('./fixtures/_merge/', import.meta.url);
+  mkdirSync(dir, { recursive: true });
+  const srcFile = fileURLToPath(new URL('src.db', dir));
+  try {
+    const src = openDb(srcFile);
+    let batch = [{ name: 'A 活動', url: 'a', fields: { 地點: '台北' } }, { name: 'B 活動', url: 'b', fields: { 地點: '台中' } }];
+    const ad = { id: 'beclass', name: 'BeClass', baseUrl: 'x', collect: async () => batch };
+    await runCrawl(src, ad, { log: () => {} });
+    batch = [{ ...batch[0], fields: { 地點: '高雄' } }, batch[1]];
+    await runCrawl(src, ad, { log: () => {} });
+    src.exec('PRAGMA journal_mode = DELETE;');
+    src.close();
+
+    const db = openDb(':memory:');
+    for (const n of ['h1', 'h2', 'h3']) upsertEvent(db, 'huashan', { name: n, fields: {} });
+    upsertEvent(db, 'beclass', { name: '舊的', fields: {} });
+    mergeSitesFrom(db, srcFile, () => {});
+
+    assert.deepEqual(db.prepare("SELECT name FROM events WHERE site_id = 'beclass' ORDER BY name").all().map((r) => r.name), ['A 活動', 'B 活動']);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM events WHERE site_id = 'huashan'").get().n, 3);
+    const a = db.prepare("SELECT * FROM events WHERE name = 'A 活動'").get();
+    assert.equal(JSON.parse(a.fields_json)['地點'], '高雄');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM event_history WHERE event_id = ?').get(a.id).n, 1);
+    assert.equal(db.prepare('SELECT site_id FROM crawl_runs WHERE id = ?').get(a.updated_run).site_id, 'beclass');
+  } finally {
+    for (const f of ['src.db', 'src.db-wal', 'src.db-shm']) { try { unlinkSync(new URL(f, dir)); } catch {} }
+  }
+});

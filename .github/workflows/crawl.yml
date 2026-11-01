@@ -4,6 +4,9 @@ name: 每日抓取
 on:
   schedule:
     - cron: '0 22 * * *'   # UTC 22:00 = 台灣 06:00（GitHub 排程可能延遲幾分鐘到一小時）
+  workflow_run:
+    workflows: ['BeClass（家裡電腦）']   # 家裡電腦抓完 BeClass 後，接著合併並發佈網站
+    types: [completed]
   workflow_dispatch:
     inputs:
       site:
@@ -74,7 +77,17 @@ jobs:
           if [ -n "$SITE" ]; then
             node --disable-warning=ExperimentalWarning src/crawl.js --site "$SITE"
           else
-            node --disable-warning=ExperimentalWarning src/crawl.js
+            node --disable-warning=ExperimentalWarning src/crawl.js --skip beclass
+          fi
+
+      - name: 合併 BeClass（家裡電腦抓的，data-beclass 分支）
+        run: |
+          if git fetch --depth=1 origin data-beclass; then
+            git show origin/data-beclass:beclass.enc > db/beclass.enc
+            node --disable-warning=ExperimentalWarning src/fragment.js merge db/beclass.enc
+            rm -f db/beclass.enc
+          else
+            echo "還沒有 data-beclass 分支（家裡電腦還沒抓過），略過"
           fi
 
       - name: 存回資料庫（data 分支只保留最新一份）

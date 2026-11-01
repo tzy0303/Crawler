@@ -1,0 +1,46 @@
+# BeClass 封鎖雲端主機 IP，改由家裡電腦（self-hosted runner，標籤 beclass）抓。
+# 抓完把 BeClass 的資料（加密）推到 data-beclass 分支；「每日抓取」會接著執行，把它合併進網站。
+# 家裡電腦沒開機時這個 workflow 會排隊等到開機，不影響其他網站。
+name: BeClass（家裡電腦）
+
+on:
+  schedule:
+    - cron: '40 21 * * *'   # UTC 21:40 = 台灣 05:40
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beclass
+  cancel-in-progress: false
+
+jobs:
+  beclass:
+    runs-on: [self-hosted, beclass]
+    timeout-minutes: 60
+    env:
+      # 資料庫放在家裡電腦固定位置，每次接著上次的資料增量抓
+      DB_FILE: D:\actions-runner-data\beclass.db
+      SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+    defaults:
+      run:
+        shell: D:\Git\bin\bash.exe --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: npm ci
+
+      - name: 抓 BeClass
+        run: node --disable-warning=ExperimentalWarning src/crawl.js --site beclass
+
+      - name: 上傳 BeClass 資料（data-beclass 分支只保留最新一份）
+        run: |
+          out="$RUNNER_TEMP/beclass-upload"
+          rm -rf "$out" && mkdir -p "$out"
+          node --disable-warning=ExperimentalWarning src/fragment.js export beclass "$out/beclass.enc"
+          cd "$out"
+          git init -q -b data-beclass
+          git add beclass.enc
+          git -c user.name="crawler-bot" -c user.email="crawler-bot@users.noreply.github.com" commit -qm "beclass $(date '+%F %T')"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data-beclass
