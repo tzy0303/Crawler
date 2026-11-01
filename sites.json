@@ -10,16 +10,5 @@
     "initialPages": 2,
     "trackDescription": false,
     "volatileFields": []
-  },
-  {
-    "id": "accupass-com",
-    "name": "ACCPASS",
-    "enabled": true,
-    "listUrl": "https://www.accupass.com/?area=north",
-    "fetchDetail": true,
-    "trackDescription": false,
-    "volatileFields": [],
-    "maxPages": 5,
-    "encoding": "auto"
   }
 ]
