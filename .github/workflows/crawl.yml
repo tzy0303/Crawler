@@ -35,6 +35,11 @@ jobs:
       DB_FILE: ${{ github.workspace }}/db/crawler.db
       # 網站登入密碼：有設定時，網頁和 data 分支的資料都會加密（Settings → Secrets → SITE_PASSWORD）
       SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+      # 104 職缺通知信（抓取和匯出都要用到；沒設定就略過）
+      IMAP_USER: ${{ secrets.IMAP_USER }}
+      IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+      IMAP_HOST: ${{ secrets.IMAP_HOST }}
+      IMAP_MAILBOX: ${{ secrets.IMAP_MAILBOX }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,11 +70,6 @@ jobs:
         continue-on-error: true
         env:
           SITE: ${{ github.event.inputs.site }}
-          # 104 職缺通知信：repo Settings → Secrets and variables → Actions 設定（沒設定就略過）
-          IMAP_USER: ${{ secrets.IMAP_USER }}
-          IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
-          IMAP_HOST: ${{ secrets.IMAP_HOST }}
-          IMAP_MAILBOX: ${{ secrets.IMAP_MAILBOX }}
         run: |
           if [ -n "$SITE" ]; then
             node --disable-warning=ExperimentalWarning src/crawl.js --site "$SITE"
