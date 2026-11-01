@@ -50,6 +50,11 @@
   .preview { max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:6px; margin-top:6px; font-size:12px; }
   details summary { cursor:pointer; color:var(--muted); font-size:12px; margin-top:8px; }
   .actions button { padding:3px 8px; font-size:12px; }
+  #loginBox { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:100; padding:16px; }
+  #loginBox[hidden] { display:none; }
+  #loginBox form { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; width:100%; max-width:340px; }
+  #loginBox h2 { margin:0 0 4px; font-size:18px; }
+  #loginBox button { width:100%; margin-top:12px; }
   .static-only { display:none; }
   body.static .static-only { display:revert; }
   body.static .server-only { display:none; }
@@ -61,6 +66,7 @@
   <select id="site" style="width:auto"></select>
   <span id="status" class="muted"></span>
   <span style="flex:1"></span>
+  <button id="logoutBtn" hidden>登出</button>
   <button id="sitesBtn">網站管理</button>
   <button id="crawlBtn" class="primary">立即抓取此網站</button>
 </header>
@@ -88,6 +94,16 @@
     <div class="tablewrap"><table id="tbl"></table></div>
   </section>
 </main>
+<div id="loginBox" hidden>
+  <form id="loginForm">
+    <h2>活動更新爬蟲</h2>
+    <p class="muted" style="margin:0 0 12px">請輸入密碼才能查看</p>
+    <input type="password" id="loginPw" autocomplete="current-password" placeholder="密碼">
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="loginRemember"> 記住這台裝置</label>
+    <button class="primary" id="loginBtn">登入</button>
+    <div id="loginErr" class="err" style="margin-top:8px"></div>
+  </form>
+</div>
 <dialog id="dlg"><div id="dlgBody"></div><form method="dialog" style="text-align:right"><button>關閉</button></form></dialog>
 <dialog id="sitesDlg">
   <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">網站管理</h3><button id="sitesClose">關閉</button></div>
@@ -128,11 +144,50 @@ async function initStatic() {
   try { const r = await fetch('static.json', { cache: 'no-store' }); if (!r.ok) return; STATIC = await r.json(); } catch { return; }
   await new Promise((ok, no) => { const s = document.createElement('script'); s.src = SQLJS + 'sql-wasm.js'; s.onload = ok; s.onerror = () => no(new Error('sql.js 載入失敗')); document.head.appendChild(s); });
   const SQL = await initSqlJs({ locateFile: (f) => SQLJS + f });
-  const buf = await (await fetch(`crawler.db?v=${encodeURIComponent(STATIC.generatedAt)}`)).arrayBuffer();
-  sqlDb = new SQL.Database(new Uint8Array(buf));
+  let dbBytes;
+  if (STATIC.encrypted) {
+    // 有設網站密碼：資料加密在 data.enc，登入後在瀏覽器解密
+    const C = await import('./shared/crypto.js');
+    const enc = new Uint8Array(await (await fetch('data.enc', { cache: 'no-store' })).arrayBuffer());
+    const { json, db } = C.unpackBundle(await login((pw) => C.decryptBytes(enc, pw)));
+    STATIC = json;
+    dbBytes = db;
+    $('logoutBtn').hidden = false;
+  } else {
+    dbBytes = new Uint8Array(await (await fetch(`crawler.db?v=${encodeURIComponent(STATIC.generatedAt)}`)).arrayBuffer());
+  }
+  sqlDb = new SQL.Database(dbBytes);
   Q = await import('./shared/query.js');
   document.body.classList.add('static');
 }
+/** 登入：先試已記住的密碼，不行就顯示登入畫面，解密成功才繼續 */
+const PW_KEY = 'site_pw';
+const savedPw = () => { try { return localStorage.getItem(PW_KEY) || sessionStorage.getItem(PW_KEY); } catch { return null; } };
+async function login(tryDecrypt) {
+  const saved = savedPw();
+  if (saved) { try { return await tryDecrypt(saved); } catch {} }
+  $('loginBox').hidden = false;
+  $('loginPw').focus();
+  return new Promise((resolve) => {
+    $('loginForm').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const pw = $('loginPw').value;
+      if (!pw) return;
+      $('loginBtn').disabled = true; $('loginBtn').textContent = '驗證中…'; $('loginErr').textContent = '';
+      try {
+        const data = await tryDecrypt(pw);
+        try { ($('loginRemember').checked ? localStorage : sessionStorage).setItem(PW_KEY, pw); } catch {}
+        $('loginBox').hidden = true;
+        resolve(data);
+      } catch {
+        $('loginErr').textContent = '密碼錯誤';
+        $('loginPw').select();
+      } finally { $('loginBtn').disabled = false; $('loginBtn').textContent = '登入'; }
+    };
+  });
+}
+$('logoutBtn').onclick = () => { try { localStorage.removeItem(PW_KEY); sessionStorage.removeItem(PW_KEY); } catch {} location.reload(); };
+
 // 讓 sql.js 跟 node:sqlite 一樣用 prepare(sql).get/all
 const wrapDb = { prepare: (sql) => ({
   all(...args) { const st = sqlDb.prepare(sql); st.bind(args); const out = []; while (st.step()) out.push(st.getAsObject()); st.free(); return out; },

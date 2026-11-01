@@ -1,0 +1,61 @@
+// 密碼加解密（AES-256-GCM，金鑰用 PBKDF2-SHA256 從密碼推導）。
+// Node（globalThis.crypto）與瀏覽器（WebCrypto）共用：雲端匯出時加密，網頁登入時在瀏覽器解密。
+// 格式：'CRW1'(4) + salt(16) + iv(12) + ciphertext
+
+const MAGIC = [0x43, 0x52, 0x57, 0x31];
+const ITERATIONS = 600_000;
+
+async function deriveKey(password, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: ITERATIONS, hash: 'SHA-256' },
+    base,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+export const isEncrypted = (bytes) => bytes.length > 32 && MAGIC.every((b, i) => bytes[i] === b);
+
+export async function encryptBytes(bytes, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(password, salt);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  const out = new Uint8Array(4 + 16 + 12 + ct.length);
+  out.set(MAGIC, 0);
+  out.set(salt, 4);
+  out.set(iv, 20);
+  out.set(ct, 32);
+  return out;
+}
+
+/** 密碼錯誤或檔案被改過會丟出錯誤 */
+export async function decryptBytes(bytes, password) {
+  if (!isEncrypted(bytes)) throw new Error('不是加密檔');
+  const key = await deriveKey(password, bytes.slice(4, 20));
+  try {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(20, 32) }, key, bytes.slice(32)));
+  } catch {
+    throw new Error('密碼錯誤');
+  }
+}
+
+/** 網站資料包：網站清單（JSON）+ 資料庫，一起加密，登入時只要推導一次金鑰 */
+export function packBundle(json, dbBytes) {
+  const head = new TextEncoder().encode(JSON.stringify(json));
+  const out = new Uint8Array(4 + head.length + dbBytes.length);
+  new DataView(out.buffer).setUint32(0, head.length);
+  out.set(head, 4);
+  out.set(dbBytes, 4 + head.length);
+  return out;
+}
+
+export function unpackBundle(bytes) {
+  const len = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0);
+  return {
+    json: JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + len))),
+    db: bytes.subarray(4 + len),
+  };
+}

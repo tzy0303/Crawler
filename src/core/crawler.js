@@ -5,6 +5,8 @@ import { recomputeSiteFields } from './fields.js';
 import { ensureSite, finishRun, startRun } from './store.js';
 
 const QUIET_PAGES_TO_STOP = 2;
+// GitHub Actions 的執行紀錄是公開的：雲端只記數量，不印出活動/職缺名稱
+const ON_CI = !!process.env.GITHUB_ACTIONS;
 
 /**
  * 爬一個網站。
@@ -23,6 +25,7 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
   const volatile = [...(adapter.volatileFields ?? []), ...DERIVED_FIELDS];
   log(`[${adapter.id}] run #${runId} 開始（${full ? '完整' : isFirstRun ? '首次' : '增量'}）`);
 
+  const itemLog = ON_CI ? () => {} : log;
   const record = (item, extra = {}, partial = false) => {
     const fields = addDerivedFields({ ...item.fields, ...extra.fields });
     const result = upsertEvent(db, adapter.id,
@@ -31,10 +34,10 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
     stats.seen++;
     if (result === 'new') {
       stats.newCount++;
-      log(`[${adapter.id}]   + 新增：${item.name}`);
+      itemLog(`[${adapter.id}]   + 新增：${item.name}`);
     } else if (result === 'updated') {
       stats.updatedCount++;
-      log(`[${adapter.id}]   * 修改：${item.name}`);
+      itemLog(`[${adapter.id}]   * 修改：${item.name}`);
     }
     return result !== 'same';
   };
@@ -92,7 +95,7 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
         } catch (err) {
           // 詳細頁抓不到就跳過，避免只有列表欄位時被誤判成「修改」；下次再補
           stats.failedDetails++;
-          log(`[${adapter.id}]   詳細頁失敗：${item.name}：${err.message}`);
+          itemLog(`[${adapter.id}]   詳細頁失敗：${item.name}：${err.message}`);
           continue;
         }
         if (record(item, detail)) changed++;

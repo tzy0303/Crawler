@@ -62,6 +62,13 @@ npm test
 3. repo **Settings → Pages → Source 選「GitHub Actions」**。
 4. 到 GitHub 個人 **Settings → Developer settings → Fine-grained tokens** 建立權杖：只授權這個 repo，權限 **Contents: Read and write**、**Actions: Read and write**。第一次在網頁修改網站時貼上，權杖只存在你的瀏覽器裡。
 
+**網站密碼（建議設定）**：在 repo **Settings → Secrets and variables → Actions** 新增 `SITE_PASSWORD`，之後雲端每次執行都會：
+- 把網頁資料加密成 `data.enc`（AES-256-GCM，金鑰由密碼經 PBKDF2 推導），打開網頁要先輸入密碼，在瀏覽器裡解密。
+- `data` 分支也只存加密後的 `crawler.db.enc`，public repo 裡看不到內容。
+- 執行紀錄（公開）只記數量，不印出活動和職缺名稱。
+
+這是一組共用密碼，不是個人帳號。加密檔可以公開下載，所以密碼請設 12 個字以上。登入時可以勾選「記住這台裝置」，按右上角「登出」可以清除。
+
 注意：public repo 如果連續 60 天沒有任何活動，GitHub 會自動停用排程。屆時到 Actions 頁面按一下重新啟用即可。
 
 ## 部署到其他雲端主機（Docker）

@@ -219,3 +219,15 @@ test('BeClass 列表頁 403 → 改讀官方 RSS：只新增，已存在的不�
   assert.equal(row.url, 'https://www.beclass.com/rid=abc123');
   assert.equal(JSON.parse(row.fields_json)['活動日期'], '2026-12-01');
 });
+
+test('網站密碼：加密 → 正確密碼解得開、錯誤密碼失敗；資料包打包/拆包', async () => {
+  const { encryptBytes, decryptBytes, isEncrypted, packBundle, unpackBundle } = await import('../src/shared/crypto.js');
+  const db = new TextEncoder().encode('SQLite format 3\0 假資料庫內容');
+  const enc = await encryptBytes(packBundle({ sites: [{ id: 'a' }] }, db), '正確的長密碼 2026!');
+  assert.ok(isEncrypted(enc));
+  assert.ok(!new TextDecoder().decode(enc).includes('假資料庫'));
+  const { json, db: back } = unpackBundle(await decryptBytes(enc, '正確的長密碼 2026!'));
+  assert.deepEqual(json, { sites: [{ id: 'a' }] });
+  assert.deepEqual([...back], [...db]);
+  await assert.rejects(() => decryptBytes(enc, '錯的'), /密碼錯誤/);
+});
