@@ -13,7 +13,7 @@
   },
   {
     "id": "accupass-com",
-    "name": "accupass",
+    "name": "ACCPASS",
     "enabled": true,
     "listUrl": "https://www.accupass.com/?area=north",
     "fetchDetail": true,
