@@ -5,7 +5,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { decryptBytes, encryptBytes, isEncrypted } from './shared/crypto.js';
 
 const [cmd, input, output] = process.argv.slice(2);
-const password = process.env.SITE_PASSWORD;
+// Secrets 貼上時常多帶空白或換行；網頁登入時打的密碼不會有
+const password = process.env.SITE_PASSWORD?.trim();
 if (!password) {
   console.error('沒有設定 SITE_PASSWORD');
   process.exit(1);

@@ -44,7 +44,8 @@ const info = {
   sites,
 };
 
-const password = process.env.SITE_PASSWORD;
+// Secrets 貼上時常多帶空白或換行；網頁登入時打的密碼不會有
+const password = process.env.SITE_PASSWORD?.trim();
 if (password) {
   const bundle = packBundle(info, new Uint8Array(readFileSync(dbOut)));
   writeFileSync(join(out, 'data.enc'), await encryptBytes(bundle, password));
