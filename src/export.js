@@ -1,31 +1,13 @@
 // 匯出雲端靜態網站（GitHub Pages）：node src/export.js [輸出資料夾]
 // 網頁 + 共用查詢模組 + 資料庫副本 + static.json（網站清單）
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { loadSites } from './adapters/index.js';
 import { config, ROOT } from './config.js';
+import { copyDir, removeDir } from './core/fsutil.js';
 import { now, openDb } from './core/store.js';
 import { siteStats } from './shared/query.js';
-
-// Node 25 的 fs.rmSync / cpSync 在 Windows 中文路徑會整個程序崩潰，自己遞迴處理
-function removeDir(dir) {
-  if (!existsSync(dir)) return;
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) removeDir(p);
-    else unlinkSync(p);
-  }
-  rmdirSync(dir);
-}
-
-function copyDir(src, dst) {
-  mkdirSync(dst, { recursive: true });
-  for (const e of readdirSync(src, { withFileTypes: true })) {
-    if (e.isDirectory()) copyDir(join(src, e.name), join(dst, e.name));
-    else copyFileSync(join(src, e.name), join(dst, e.name));
-  }
-}
 
 const out = resolve(process.argv[2] ?? '_site');
 removeDir(out);
@@ -41,8 +23,7 @@ const copy = new DatabaseSync(dbOut);
 copy.exec('PRAGMA journal_mode = DELETE;');
 copy.close();
 
-// 雲端沒設定的來源（例如 104 通知信只在本機設信箱）不顯示
-const sites = loadSites(config).filter((s) => s.adapter.configured !== false).map((s) => ({
+const sites = loadSites(config).map((s) => ({
   id: s.adapter.id,
   name: s.adapter.name,
   baseUrl: s.adapter.baseUrl,
