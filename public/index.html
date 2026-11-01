@@ -350,7 +350,8 @@ async function loadEvents() {
 async function loadRuns() {
   const runs = await api(`/api/runs?site=${$('site').value}&limit=8`);
   lastRun = runs.find((r) => r.status === 'done') ?? null;
-  $('runs').innerHTML = runs.map((r) => `<tr><td>${esc(r.started_at.slice(5, 16))}</td><td>${esc(r.status === 'done' ? '完成' : r.status === 'running' ? '執行中' : r.status === 'failed' ? '失敗' : r.status)}</td><td>+${r.new_count} / *${r.updated_count}</td></tr>`).join('') || '<tr><td class="muted">尚未執行</td></tr>';
+  const failReason = (e = '') => /HTTP 40[13]|HTTP 429/.test(e) ? '網站拒絕存取' : /登入失敗/.test(e) ? '信箱登入失敗' : /HTTP 404/.test(e) ? '找不到網址' : '錯誤';
+  $('runs').innerHTML = runs.map((r) => `<tr title="${esc(r.error ?? '')}"><td>${esc(r.started_at.slice(5, 16))}</td><td>${r.status === 'failed' ? `<span class="err">失敗：${esc(failReason(r.error))}</span>` : esc(r.status === 'done' ? '完成' : r.status === 'running' ? '執行中' : r.status)}</td><td>+${r.new_count} / *${r.updated_count}</td></tr>`).join('') || '<tr><td class="muted">尚未執行</td></tr>';
   const st = await api('/api/status');
   $('status').textContent = STATIC ? `資料更新於 ${STATIC.generatedAt}｜每天 ${st.crawlTime} 由 GitHub 自動抓取` : st.crawling ? '抓取中…' : `每天 ${st.crawlTime} 自動抓取｜下次：${st.nextRunAt ?? '-'}`;
   $('crawlBtn').disabled = st.crawling;
