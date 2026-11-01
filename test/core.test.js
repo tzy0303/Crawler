@@ -262,3 +262,27 @@ test('合併另一個資料庫的網站資料：整批取代該網站，id 重�
     for (const f of ['src.db', 'src.db-wal', 'src.db-shm']) { try { unlinkSync(new URL(f, dir)); } catch {} }
   }
 });
+
+test('地點統一：活動地點/地區/預設地點 → 地點；補上的地點不算修改', async () => {
+  const { addDerivedFields } = await import('../src/core/extract.js');
+  const a = { 活動地點: '華山 東2館' };
+  assert.deepEqual(addDerivedFields(a), ['地點']);
+  assert.equal(a['地點'], '華山 東2館');
+  const b = { 地區: '台北市大安區' };
+  addDerivedFields(b);
+  assert.equal(b['地點'], '台北市大安區');
+  assert.equal(b['縣市'], '臺北市');
+  const c = { 日期: '2026-11-01' };
+  addDerivedFields(c, { defaultLocation: '華山1914（臺北市中正區）' });
+  assert.equal(c['地點'], '華山1914（臺北市中正區）');
+  assert.equal(c['縣市'], '臺北市');
+
+  // 舊資料沒有地點欄位，之後補上「地點」不應被判成修改
+  const db = openDb(':memory:');
+  upsertEvent(db, 'h', { name: '展覽', fields: { 活動地點: '東2館' } });
+  let batch = [{ name: '展覽', fields: { 活動地點: '東2館' } }];
+  const ad = { id: 'h', name: 'h', baseUrl: 'x', collect: async () => batch };
+  const r = await runCrawl(db, ad, { log: () => {} });
+  assert.equal(r.updatedCount, 0);
+  assert.equal(JSON.parse(db.prepare('SELECT fields_json FROM events').get().fields_json)['地點'], '東2館');
+});

@@ -49,7 +49,7 @@ const scheduler = startDailyScheduler({
 
 // ---- 網站設定（網頁新增網站，存 sites.json） ----
 const CONFIG_KEYS = ['listUrl', 'linkPattern', 'fetchDetail', 'titleSelector', 'contentSelector', 'trackDescription',
-  'volatileFields', 'maxPages', 'initialPages', 'encoding', 'autoPaging'];
+  'volatileFields', 'maxPages', 'initialPages', 'encoding', 'autoPaging', 'defaultLocation'];
 
 function cleanConfig(body) {
   const cfg = {};

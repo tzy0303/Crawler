@@ -1,3 +1,4 @@
+import { CORE_FIELDS } from './extract.js';
 import { now, tx } from './store.js';
 
 const DATE_RE = /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/;
@@ -45,7 +46,8 @@ export function recomputeSiteFields(db, siteId) {
       const top = [...counts].sort((a, b) => b[1] - a[1]).slice(0, MAX_ENUM).map(([value, count]) => ({ value, count }));
       const listAll = type === 'enum' || type === 'tags';
       // 每筆都一樣的值（頁尾電話、地址）篩選沒意義
-      const filterable = coverage >= FILTERABLE_COVERAGE && counts.size >= 2;
+      // 地點、縣市每個網站都要能篩，不受出現率門檻限制
+      const filterable = (coverage >= FILTERABLE_COVERAGE || CORE_FIELDS.includes(key)) && counts.size >= 2;
       ins.run(siteId, key, type, coverage, filterable ? 1 : 0, counts.size,
         JSON.stringify(listAll ? top : top.slice(0, 5)), ts);
     }

@@ -9,7 +9,8 @@
     "maxPages": 2,
     "initialPages": 2,
     "trackDescription": false,
-    "volatileFields": []
+    "volatileFields": [],
+    "defaultLocation": "華山1914文化創意產業園區（臺北市中正區八德路一段1號）"
   },
   {
     "id": "accupass-com",

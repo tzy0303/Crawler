@@ -116,6 +116,7 @@
     <div><label>列表網址（頁碼用 {page}）</label><div class="row"><input id="sf_listUrl" placeholder="https://example.com/events?page={page}"><button id="sf_analyze" class="server-only" style="flex:0 0 auto">分析</button></div></div>
     <div class="full" id="sf_analysis"></div>
     <div class="full"><label>活動連結規則（# = 數字、* = 任意一段）</label><input id="sf_linkPattern" placeholder="按「分析」自動產生；雲端版可留空，抓取時自動判斷"></div>
+    <div class="full"><label>預設地點（選填：所有活動都在同一處時填，例如「華山1914文化創意產業園區（臺北市中正區八德路一段1號）」）</label><input id="sf_defaultLocation" placeholder="活動頁沒寫地點時使用"></div>
     <div><label>每次最多抓幾頁</label><input type="number" id="sf_maxPages" value="5" min="1" max="100"></div>
     <div><label>&nbsp;</label><label class="check"><input type="checkbox" id="sf_fetchDetail" checked> 進入每個活動的詳細頁抓欄位（較完整，但比較慢）</label></div>
     <div class="full"><details><summary>進階設定</summary><div class="form-grid">
@@ -194,7 +195,7 @@ const wrapDb = { prepare: (sql) => ({
   get(...args) { return this.all(...args)[0]; },
 }) };
 
-const CFG_KEYS = ['listUrl', 'linkPattern', 'fetchDetail', 'titleSelector', 'contentSelector', 'trackDescription', 'volatileFields', 'maxPages', 'initialPages', 'encoding'];
+const CFG_KEYS = ['listUrl', 'linkPattern', 'fetchDetail', 'titleSelector', 'contentSelector', 'trackDescription', 'volatileFields', 'maxPages', 'initialPages', 'encoding', 'defaultLocation'];
 function cleanCfg(b) {
   const c = {};
   for (const k of CFG_KEYS) if (b[k] !== undefined && b[k] !== '') c[k] = b[k];
@@ -414,7 +415,7 @@ function renderSiteTable() {
 function resetForm() {
   editingId = null; lastPreview = null;
   $('formTitle').textContent = '新增網站';
-  for (const k of ['name', 'listUrl', 'linkPattern', 'titleSelector', 'contentSelector']) $(`sf_${k}`).value = '';
+  for (const k of ['name', 'listUrl', 'linkPattern', 'titleSelector', 'contentSelector', 'defaultLocation']) $(`sf_${k}`).value = '';
   $('sf_volatile').value = '';
   $('sf_maxPages').value = 5; $('sf_fetchDetail').checked = true; $('sf_trackDescription').checked = false; $('sf_encoding').value = 'auto';
   $('sf_analysis').innerHTML = ''; $('sf_preview').innerHTML = ''; $('sf_msg').innerHTML = '';
@@ -426,6 +427,7 @@ function formConfig() {
     maxPages: Number($('sf_maxPages').value) || 5, fetchDetail: $('sf_fetchDetail').checked,
     titleSelector: $('sf_titleSelector').value.trim(), contentSelector: $('sf_contentSelector').value.trim(),
     trackDescription: $('sf_trackDescription').checked, encoding: $('sf_encoding').value,
+    defaultLocation: $('sf_defaultLocation').value.trim(),
     // 沒有預覽（例如分析失敗）時不送，避免把原本的設定清掉
     volatileFields: STATIC ? $('sf_volatile').value.split(/[,，、]/).map((x) => x.trim()).filter(Boolean)
       : document.querySelector('#sf_preview input[data-vol]')
@@ -499,7 +501,7 @@ $('siteTbl').onclick = async (ev) => {
     resetForm(); editingId = s.id;
     $('formTitle').textContent = `編輯網站：${s.name}`;
     $('sf_name').value = s.name;
-    for (const k of ['listUrl', 'linkPattern', 'titleSelector', 'contentSelector', 'maxPages']) $(`sf_${k}`).value = s.config[k] ?? (k === 'maxPages' ? 5 : '');
+    for (const k of ['listUrl', 'linkPattern', 'titleSelector', 'contentSelector', 'maxPages', 'defaultLocation']) $(`sf_${k}`).value = s.config[k] ?? (k === 'maxPages' ? 5 : '');
     $('sf_fetchDetail').checked = s.config.fetchDetail !== false;
     $('sf_trackDescription').checked = !!s.config.trackDescription;
     $('sf_encoding').value = s.config.encoding || 'auto';
@@ -511,7 +513,10 @@ $('siteTbl').onclick = async (ev) => {
     const s = siteList.find((x) => x.id === b.dataset.del);
     if (!confirm(`刪除「${s.name}」？`)) return;
     const purge = !STATIC && confirm('連同已抓到的活動資料一起刪除嗎？\n按「確定」全部刪除；按「取消」只刪除網站設定，保留資料。');
-    await api(`/api/site-configs/${s.id}?purge=${purge ? 1 : 0}`, { method: 'DELETE' });
+    try { await api(`/api/site-configs/${s.id}?purge=${purge ? 1 : 0}`, { method: 'DELETE' }); }
+    catch (e) { $('sf_msg').innerHTML = `<span class="err">${esc(errMsg(e))}</span>`; return; }
+    // 雲端版的網站清單是發佈時的快照，要等 GitHub 重新發佈才會更新，先在畫面上拿掉
+    if (STATIC) { STATIC.sites = STATIC.sites.filter((x) => x.id !== s.id); $('sf_msg').textContent = `已從 GitHub 刪除「${s.name}」，約 2～10 分鐘後重新整理頁面就會完全更新。`; }
     await loadSites(); renderSiteTable(); refreshAll();
   }
 };

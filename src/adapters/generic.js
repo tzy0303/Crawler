@@ -190,6 +190,7 @@ export function createGenericAdapter(cfg) {
     baseUrl: new URL(cfg.listUrl.replaceAll('{page}', '1')).origin,
     custom: true,
     volatileFields: cfg.volatileFields ?? [],
+    defaultLocation: cfg.defaultLocation || null, // 所有活動都在同一處的網站（例如華山）
     encoding: cfg.encoding || 'auto',
 
     listUrl(page) {

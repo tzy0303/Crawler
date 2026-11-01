@@ -68,18 +68,38 @@ export function deriveCity(text) {
 
 /** 衍生欄位由其他欄位推出，不另外算「修改」 */
 export const DERIVED_FIELDS = ['縣市'];
+/** 每個網站都要有、也一定列入篩選的欄位 */
+export const CORE_FIELDS = ['地點', '縣市'];
 
-/** 加上衍生欄位（目前：從地點/地址推縣市，依序試到推得出來為止） */
-export function addDerivedFields(fields) {
-  if ('縣市' in fields) return fields;
+const LOCATION_KEY = /地點|場地|會場|地區|工作地|上課地|集合/;
+
+/**
+ * 加上衍生欄位：
+ *  地點：網站欄位名稱不一（活動地點、場地、地區…）時統一補一個「地點」；都沒有時用網站的預設地點
+ *  縣市：從地點/地址推出，依序試到推得出來為止
+ * @returns 這次補上的欄位名稱（由其他欄位推出，不算「修改」）
+ */
+export function addDerivedFields(fields, { defaultLocation } = {}) {
+  const derived = [];
   const keys = Object.keys(fields);
-  const locKeys = [...keys.filter((k) => /地點|場地|地區|工作地/.test(k)), ...keys.filter((k) => /地址/.test(k))];
-  for (const k of locKeys) {
-    const city = deriveCity(fields[k]);
-    if (city) {
-      fields['縣市'] = city;
-      break;
+  if (!fields['地點']) {
+    const k = keys.find((x) => LOCATION_KEY.test(x) && fields[x]) ?? keys.find((x) => /地址/.test(x) && fields[x]);
+    const value = k ? fields[k] : defaultLocation;
+    if (value) {
+      fields['地點'] = value;
+      derived.push('地點');
     }
   }
-  return fields;
+  if (!('縣市' in fields)) {
+    const locKeys = ['地點', ...keys.filter((k) => LOCATION_KEY.test(k)), ...keys.filter((k) => /地址/.test(k))];
+    for (const k of locKeys) {
+      const city = deriveCity(fields[k]);
+      if (city) {
+        fields['縣市'] = city;
+        derived.push('縣市');
+        break;
+      }
+    }
+  }
+  return derived;
 }
