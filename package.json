@@ -1,0 +1,20 @@
+{
+  "name": "site-update-crawler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "活動網站更新爬蟲：記錄活動新增/修改時間，依網站欄位動態篩選",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/server.js",
+    "crawl": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/crawl.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "imapflow": "^2.10.0",
+    "mailparser": "^3.14.1"
+  }
+}

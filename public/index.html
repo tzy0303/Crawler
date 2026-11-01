@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>活動更新爬蟲</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --new:#16a34a; --upd:#d97706; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, "Microsoft JhengHei", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0 12px 0 0; }
+  .muted { color:var(--muted); font-size:12px; }
+  main { display:grid; grid-template-columns: 280px 1fr; gap:16px; padding:16px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  aside, section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  aside h3 { font-size:13px; margin:14px 0 6px; color:var(--muted); }
+  aside h3:first-child { margin-top:0; }
+  label { display:block; font-size:12px; color:var(--muted); margin-top:8px; }
+  input, select, button { font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; width:100%; }
+  .row { display:flex; gap:6px; } .row > * { flex:1; min-width:0; }
+  button { cursor:pointer; width:auto; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); cursor:pointer; white-space:nowrap; }
+  td.t { white-space:nowrap; font-size:12px; color:var(--muted); }
+  tr:hover td { background:#f9fafb; }
+  a { color:var(--accent); text-decoration:none; }
+  .badge { display:inline-block; font-size:11px; padding:0 6px; border-radius:10px; color:#fff; margin-right:4px; }
+  .b-new { background:var(--new); } .b-upd { background:var(--upd); }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap; }
+  .pager button { margin-left:4px; }
+  dialog { max-width:760px; width:92vw; border:1px solid var(--line); border-radius:10px; }
+  dialog pre { white-space:pre-wrap; max-height:240px; overflow:auto; background:var(--bg); padding:8px; border-radius:6px; }
+  .runs { font-size:12px; }
+  .runs td { padding:4px 6px; }
+  .tablewrap { overflow-x:auto; }
+  #sitesDlg { max-width:980px; }
+  .form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:4px 12px; }
+  @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } }
+  .form-grid .full { grid-column: 1 / -1; }
+  .check { display:flex; gap:6px; align-items:center; color:var(--text); font-size:13px; }
+  .check input { width:auto; }
+  .cand { border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin:4px 0; cursor:pointer; font-size:12px; }
+  .cand.sel { border-color:var(--accent); background:#eff6ff; }
+  .cand code { font-weight:600; }
+  .hint { font-size:12px; color:var(--muted); margin:4px 0; }
+  .err { color:#dc2626; font-size:13px; }
+  .preview { max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:6px; margin-top:6px; font-size:12px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; margin-top:8px; }
+  .actions button { padding:3px 8px; font-size:12px; }
+  .static-only { display:none; }
+  body.static .static-only { display:revert; }
+  body.static .server-only { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>活動更新爬蟲</h1>
+  <select id="site" style="width:auto"></select>
+  <span id="status" class="muted"></span>
+  <span style="flex:1"></span>
+  <button id="sitesBtn">網站管理</button>
+  <button id="crawlBtn" class="primary">立即抓取此網站</button>
+</header>
+<main>
+  <aside>
+    <h3>共同條件</h3>
+    <label>名稱 / 說明關鍵字</label><input id="q" placeholder="例如：健行">
+    <label>新增時間</label><div class="row"><input type="date" id="created_from"><input type="date" id="created_to"></div>
+    <label>修改時間</label><div class="row"><input type="date" id="updated_from"><input type="date" id="updated_to"></div>
+    <label>變動</label>
+    <select id="kind">
+      <option value="">全部</option>
+      <option value="lastnew">最近一次抓取新增</option>
+      <option value="lastupd">最近一次抓取修改</option>
+      <option value="updated">曾經修改過</option>
+    </select>
+    <h3>網站欄位（依網站自動產生）</h3>
+    <div id="dynFilters"><span class="muted">尚無資料，先抓取一次</span></div>
+    <div class="row" style="margin-top:12px"><button id="apply" class="primary">篩選</button><button id="reset">清除</button></div>
+    <h3>最近抓取紀錄</h3>
+    <table class="runs" id="runs"></table>
+  </aside>
+  <section>
+    <div class="toolbar"><span id="summary" class="muted"></span><span class="pager" id="pager"></span></div>
+    <div class="tablewrap"><table id="tbl"></table></div>
+  </section>
+</main>
+<dialog id="dlg"><div id="dlgBody"></div><form method="dialog" style="text-align:right"><button>關閉</button></form></dialog>
+<dialog id="sitesDlg">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">網站管理</h3><button id="sitesClose">關閉</button></div>
+  <div class="tablewrap"><table id="siteTbl" style="margin-top:8px"></table></div>
+  <h3 id="formTitle" style="margin-top:20px">新增網站</h3>
+  <p class="hint static-only">雲端版：填好名稱和列表網址後直接儲存。設定會寫進 GitHub 的 sites.json 並自動開始抓取，活動連結和分頁會自動判斷，約 2～10 分鐘後重新整理頁面就看得到。第一次修改時會要求輸入 GitHub 權杖。<a href="#" id="clearToken">清除已存的權杖</a></p>
+  <p class="hint server-only">貼上活動「列表頁」網址後按「分析」，系統會自動找出活動連結和分頁規則。先預覽抓到的活動和欄位，確認後再儲存。新網站同樣會每天自動抓取、記錄新增/修改時間，也會依欄位產生篩選條件。</p>
+  <div class="form-grid">
+    <div><label>網站名稱</label><input id="sf_name" placeholder="例如：華山文創活動"></div>
+    <div><label>列表網址（頁碼用 {page}）</label><div class="row"><input id="sf_listUrl" placeholder="https://example.com/events?page={page}"><button id="sf_analyze" class="server-only" style="flex:0 0 auto">分析</button></div></div>
+    <div class="full" id="sf_analysis"></div>
+    <div class="full"><label>活動連結規則（# = 數字、* = 任意一段）</label><input id="sf_linkPattern" placeholder="按「分析」自動產生；雲端版可留空，抓取時自動判斷"></div>
+    <div><label>每次最多抓幾頁</label><input type="number" id="sf_maxPages" value="5" min="1" max="100"></div>
+    <div><label>&nbsp;</label><label class="check"><input type="checkbox" id="sf_fetchDetail" checked> 進入每個活動的詳細頁抓欄位（較完整，但比較慢）</label></div>
+    <div class="full"><details><summary>進階設定</summary><div class="form-grid">
+      <div><label>標題 CSS 選擇器（選填）</label><input id="sf_titleSelector" placeholder="例如 h1.title"></div>
+      <div><label>內容區 CSS 選擇器（選填）</label><input id="sf_contentSelector" placeholder="例如 .event-content"></div>
+      <div class="full static-only"><label>每天會變的欄位（逗號分隔，變動不算修改，例如：剩餘名額, 瀏覽次數）</label><input id="sf_volatile"></div>
+      <div><label>編碼</label><select id="sf_encoding"><option value="auto">自動</option><option value="utf-8">UTF-8</option><option value="big5">Big5</option></select></div>
+      <div><label>&nbsp;</label><label class="check"><input type="checkbox" id="sf_trackDescription"> 內文有變也算「修改」（建議搭配內容區選擇器）</label></div>
+    </div></details></div>
+    <div class="full" id="sf_preview"></div>
+    <div class="full row" style="justify-content:flex-end;margin-top:8px"><span id="sf_msg" style="flex:1"></span><button id="sf_cancel" style="flex:0 0 auto">清除</button><button id="sf_save" class="primary" style="flex:0 0 auto">儲存網站</button></div>
+  </div>
+</dialog>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(Array.isArray(s) ? s.join('、') : s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const httpApi = async (u, opt) => { const r = await fetch(u, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); };
+const api = (u, opt) => (STATIC ? staticApi(u, opt) : httpApi(u, opt));
+const fail = (msg) => new Error(JSON.stringify({ error: msg }));
+const errMsg = (e) => { try { return JSON.parse(e.message).error ?? e.message; } catch { return e.message; } };
+
+// ---- 雲端靜態模式（GitHub Pages）：瀏覽器直接查 SQLite（sql.js），寫入走 GitHub API ----
+let STATIC = null, Q = null, sqlDb = null;
+const SQLJS = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
+async function initStatic() {
+  try { const r = await fetch('static.json', { cache: 'no-store' }); if (!r.ok) return; STATIC = await r.json(); } catch { return; }
+  await new Promise((ok, no) => { const s = document.createElement('script'); s.src = SQLJS + 'sql-wasm.js'; s.onload = ok; s.onerror = () => no(new Error('sql.js 載入失敗')); document.head.appendChild(s); });
+  const SQL = await initSqlJs({ locateFile: (f) => SQLJS + f });
+  const buf = await (await fetch(`crawler.db?v=${encodeURIComponent(STATIC.generatedAt)}`)).arrayBuffer();
+  sqlDb = new SQL.Database(new Uint8Array(buf));
+  Q = await import('./shared/query.js');
+  document.body.classList.add('static');
+}
+// 讓 sql.js 跟 node:sqlite 一樣用 prepare(sql).get/all
+const wrapDb = { prepare: (sql) => ({
+  all(...args) { const st = sqlDb.prepare(sql); st.bind(args); const out = []; while (st.step()) out.push(st.getAsObject()); st.free(); return out; },
+  get(...args) { return this.all(...args)[0]; },
+}) };
+
+const CFG_KEYS = ['listUrl', 'linkPattern', 'fetchDetail', 'titleSelector', 'contentSelector', 'trackDescription', 'volatileFields', 'maxPages', 'initialPages', 'encoding'];
+function cleanCfg(b) {
+  const c = {};
+  for (const k of CFG_KEYS) if (b[k] !== undefined && b[k] !== '') c[k] = b[k];
+  if (!/^https?:\/\//i.test(c.listUrl ?? '')) throw fail('列表網址需以 http:// 或 https:// 開頭');
+  c.fetchDetail = c.fetchDetail !== false; c.trackDescription = !!c.trackDescription;
+  c.volatileFields = [].concat(c.volatileFields ?? []).filter(Boolean);
+  c.maxPages = Math.min(Math.max(Number(c.maxPages) || 5, 1), 100);
+  return c;
+}
+function newId(listUrl, list) {
+  const base = new URL(listUrl.replaceAll('{page}', '1')).hostname.replace(/^www\./, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  const taken = new Set([...STATIC.sites.map((s) => s.id), ...list.map((s) => s.id)]);
+  let id = base;
+  for (let i = 2; taken.has(id); i++) id = `${base}-${i}`;
+  return id;
+}
+
+const gh = {
+  token() {
+    let t = '';
+    try { t = localStorage.getItem('gh_token') || ''; } catch {}
+    if (!t) {
+      t = (prompt('請貼上 GitHub 權杖（Fine-grained token：此 repo 的 Contents、Actions 讀寫權限）。\n只會存在這台電腦的瀏覽器裡。') || '').trim();
+      if (!t) throw fail('需要 GitHub 權杖才能修改網站或觸發抓取');
+      try { localStorage.setItem('gh_token', t); } catch {}
+    }
+    return t;
+  },
+  async call(path, opt = {}, allow404 = false) {
+    if (!STATIC.repo) throw fail('這份網頁沒有設定 GitHub repo，無法修改');
+    const r = await fetch(`https://api.github.com/repos/${STATIC.repo}${path}`, { ...opt, headers: {
+      Accept: 'application/vnd.github+json', Authorization: `Bearer ${this.token()}`, 'X-GitHub-Api-Version': '2022-11-28',
+      ...(opt.body ? { 'Content-Type': 'application/json' } : {}) } });
+    if (r.status === 401) { try { localStorage.removeItem('gh_token'); } catch {} throw fail('GitHub 權杖無效或過期，請重新操作並輸入新的權杖'); }
+    if (r.status === 404 && allow404) return null;
+    if (!r.ok) throw fail(`GitHub ${r.status}：${(await r.json().catch(() => ({}))).message ?? ''}（請確認權杖有 Contents、Actions 寫入權限）`);
+    return r.status === 204 ? {} : r.json();
+  },
+  /** 讀 sites.json → mutate(list) → 寫回（會自動觸發 GitHub 抓取） */
+  async updateSites(mutate, message) {
+    const cur = await this.call(`/contents/sites.json?ref=${encodeURIComponent(STATIC.branch)}`, {}, true);
+    const list = cur ? JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(cur.content.replace(/\n/g, '')), (c) => c.charCodeAt(0)))) : [];
+    const result = mutate(list);
+    let bin = '';
+    new TextEncoder().encode(JSON.stringify(list, null, 2) + '\n').forEach((b) => (bin += String.fromCharCode(b)));
+    await this.call('/contents/sites.json', { method: 'PUT', body: JSON.stringify({ message, content: btoa(bin), branch: STATIC.branch, ...(cur ? { sha: cur.sha } : {}) }) });
+    return result;
+  },
+  dispatch(site) {
+    return this.call('/actions/workflows/crawl.yml/dispatches', { method: 'POST', body: JSON.stringify({ ref: STATIC.branch, inputs: { site: site || '' } }) });
+  },
+};
+
+async function staticApi(u, opt = {}) {
+  const url = new URL(u, location.href);
+  const path = url.pathname.slice(url.pathname.indexOf('/api/'));
+  const p = url.searchParams, method = opt.method ?? 'GET', body = opt.body ? JSON.parse(opt.body) : {};
+  let m;
+  if (path === '/api/sites') return STATIC.sites;
+  if ((m = path.match(/^\/api\/sites\/([\w-]+)\/fields$/))) return Q.getSiteFields(wrapDb, m[1], { all: p.get('all') === '1' });
+  if (path === '/api/events') return Q.queryEvents(wrapDb, p);
+  if ((m = path.match(/^\/api\/events\/(\d+)$/))) return Q.getEvent(wrapDb, m[1]);
+  if (path === '/api/runs') return Q.listRuns(wrapDb, p.get('site'), p.get('limit'));
+  if (path === '/api/status') return { crawling: false, crawlTime: STATIC.crawlTime, nextRunAt: null };
+  if (path === '/api/crawl') { await gh.dispatch(body.site); return { started: true }; }
+  if (path === '/api/site-configs/preview') throw fail('雲端版無法即時預覽（瀏覽器不能直接讀取其他網站）。儲存後，GitHub 抓取時會自動判斷活動連結和分頁。');
+  if (path === '/api/site-configs' && method === 'POST') {
+    return gh.updateSites((list) => {
+      const id = newId(body.listUrl, list);
+      list.push({ id, name: body.name || id, enabled: true, ...cleanCfg(body) });
+      return { id };
+    }, `新增網站：${body.name || body.listUrl}`);
+  }
+  if ((m = path.match(/^\/api\/site-configs\/([\w-]+)$/))) {
+    return gh.updateSites((list) => {
+      const i = list.findIndex((s) => s.id === m[1]);
+      if (i < 0) throw fail('找不到這個網站的設定');
+      if (method === 'DELETE') { list.splice(i, 1); return { ok: true }; }
+      const { name, enabled, ...rest } = body;
+      list[i] = { ...list[i], ...cleanCfg({ ...list[i], ...rest }) };
+      if (name !== undefined) list[i].name = String(name).trim() || list[i].name;
+      if (enabled !== undefined) list[i].enabled = !!enabled;
+      return { ok: true };
+    }, `${method === 'DELETE' ? '刪除' : '修改'}網站：${m[1]}`);
+  }
+  throw fail('not found');
+}
+let fields = [], lastRun = null, state = { page: 1, sort: 'created', dir: 'desc' };
+const SHOW_COLS = 4;
+
+let siteList = [];
+async function loadSites(selectId) {
+  siteList = await api('/api/sites');
+  const keep = selectId ?? $('site').value;
+  $('site').innerHTML = siteList.map((s) => `<option value="${s.id}">${esc(s.name)}（${s.count}）${s.configured === false ? '（未設定信箱）' : s.enabled ? '' : '（已停用）'}</option>`).join('');
+  if (siteList.some((s) => s.id === keep)) $('site').value = keep;
+}
+
+async function loadFields() {
+  fields = await api(`/api/sites/${$('site').value}/fields`);
+  $('dynFilters').innerHTML = fields.length ? fields.map((f, i) => {
+    const id = `f${i}`;
+    const head = `<label>${esc(f.key)} <span class="muted">${Math.round(f.coverage * 100)}%</span></label>`;
+    if (f.type === 'enum' || f.type === 'tags') return head + `<select id="${id}"><option value="">全部</option>${f.values.map((v) => `<option value="${esc(v.value)}">${esc(v.value)}（${v.count}）</option>`).join('')}</select>`;
+    if (f.type === 'date') return head + `<div class="row"><input type="date" id="${id}_min"><input type="date" id="${id}_max"></div>`;
+    if (f.type === 'number') return head + `<div class="row"><input type="number" id="${id}_min" placeholder="最小"><input type="number" id="${id}_max" placeholder="最大"></div>`;
+    return head + `<input id="${id}" placeholder="包含…">`;
+  }).join('') : '<span class="muted">尚無資料，先抓取一次</span>';
+}
+
+function buildFilters() {
+  const out = {};
+  fields.forEach((f, i) => {
+    const id = `f${i}`, c = {};
+    if (f.type === 'enum' || f.type === 'tags') c.eq = $(id).value;
+    else if (f.type === 'date' || f.type === 'number') { c.min = $(`${id}_min`).value; c.max = $(`${id}_max`).value; }
+    else c.like = $(id).value;
+    if (Object.values(c).some((v) => v !== '')) out[f.key] = c;
+  });
+  return out;
+}
+
+async function loadEvents() {
+  const p = new URLSearchParams({ site: $('site').value, page: state.page, sort: state.sort, dir: state.dir, size: 50 });
+  for (const k of ['q', 'created_from', 'created_to', 'updated_from', 'updated_to']) if ($(k).value) p.set(k, $(k).value);
+  const kind = $('kind').value;
+  if ((kind === 'lastnew' || kind === 'lastupd') && lastRun) { p.set('run', lastRun.id); p.set('kind', kind === 'lastnew' ? 'new' : 'updated'); }
+  if (kind === 'updated') p.set('kind', 'updated');
+  const f = buildFilters();
+  if (Object.keys(f).length) p.set('filters', JSON.stringify(f));
+  const data = await api(`/api/events?${p}`);
+  const cols = fields.filter((f) => f.type !== 'number').slice(0, SHOW_COLS).map((f) => f.key);
+  const th = (key, label) => `<th data-sort="${key}">${label}${state.sort === key ? (state.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
+  $('tbl').innerHTML = `<tr>${th('name', '名稱')}${cols.map((c) => `<th>${esc(c)}</th>`).join('')}${th('created', '新增時間')}${th('updated', '修改時間')}</tr>` +
+    data.rows.map((r) => {
+      const isNew = lastRun && r.created_run === lastRun.id;
+      const isUpd = lastRun && r.updated_run === lastRun.id && r.created_run !== r.updated_run;
+      return `<tr><td>${isNew ? '<span class="badge b-new">新</span>' : ''}${isUpd ? '<span class="badge b-upd">改</span>' : ''}<a href="#" data-id="${r.id}">${esc(r.name)}</a> <a href="${esc(r.url)}" target="_blank" title="原網頁">↗</a></td>` +
+        cols.map((c) => `<td>${esc(r.fields[c])}</td>`).join('') +
+        `<td class="t">${esc(r.created_at)}</td><td class="t">${r.updated_at !== r.created_at ? esc(r.updated_at) : '—'}</td></tr>`;
+    }).join('');
+  if (!data.total && $('site').value === 'mail104' && !p.has('filters') && !p.has('q')) {
+    $('tbl').innerHTML += `<tr><td colspan="9" class="muted" style="padding:16px">還沒有職缺。系統會讀信箱裡 104 寄來的「職缺通知信」：<br>
+      1. 到 104 搜尋職缺 → 按「儲存搜尋條件」→ 開啟 email 通知。<br>
+      2. 104 通常每天寄一次，收到後隔天 ${esc(STATIC?.crawlTime ?? '06:00')} 會自動出現，也可以按右上角「立即抓取此網站」。<br>
+      （帳號驗證碼這類信件不是職缺通知，會被略過。）</td></tr>`;
+  }
+  const pages = Math.max(1, Math.ceil(data.total / data.size));
+  $('summary').textContent = `共 ${data.total} 筆，第 ${data.page} / ${pages} 頁`;
+  $('pager').innerHTML = `<button ${data.page <= 1 ? 'disabled' : ''} data-p="${data.page - 1}">上一頁</button><button ${data.page >= pages ? 'disabled' : ''} data-p="${data.page + 1}">下一頁</button>`;
+}
+
+async function loadRuns() {
+  const runs = await api(`/api/runs?site=${$('site').value}&limit=8`);
+  lastRun = runs.find((r) => r.status === 'done') ?? null;
+  $('runs').innerHTML = runs.map((r) => `<tr><td>${esc(r.started_at.slice(5, 16))}</td><td>${esc(r.status === 'done' ? '完成' : r.status === 'running' ? '執行中' : r.status === 'failed' ? '失敗' : r.status)}</td><td>+${r.new_count} / *${r.updated_count}</td></tr>`).join('') || '<tr><td class="muted">尚未執行</td></tr>';
+  const st = await api('/api/status');
+  $('status').textContent = STATIC ? `資料更新於 ${STATIC.generatedAt}｜每天 ${st.crawlTime} 由 GitHub 自動抓取` : st.crawling ? '抓取中…' : `每天 ${st.crawlTime} 自動抓取｜下次：${st.nextRunAt ?? '-'}`;
+  $('crawlBtn').disabled = st.crawling;
+  return st.crawling;
+}
+
+async function showEvent(id) {
+  const e = await api(`/api/events/${id}`);
+  $('dlgBody').innerHTML = `<h3><a href="${esc(e.url)}" target="_blank">${esc(e.name)}</a></h3>
+    <p class="muted">新增：${esc(e.created_at)}｜修改：${esc(e.updated_at)}｜最後看到：${esc(e.last_seen_at)}</p>
+    <table>${Object.entries(e.fields).map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>
+    ${e.description ? `<h4>活動說明</h4><pre>${esc(e.description)}</pre>` : ''}
+    <h4>修改紀錄</h4>${e.history.length ? e.history.map((h) => `<div><b>${esc(h.changed_at)}</b><ul>${Object.entries(h.changes).map(([k, c]) => `<li>${esc(k)}：${k === '活動說明' ? '（內容變更）' : `${esc(c.from ?? '∅')} → ${esc(c.to ?? '∅')}`}</li>`).join('')}</ul></div>`).join('') : '<span class="muted">無</span>'}`;
+  $('dlg').showModal();
+}
+
+async function refreshAll() { await loadRuns(); await loadFields(); state.page = 1; await loadEvents(); }
+
+$('site').onchange = refreshAll;
+$('apply').onclick = () => { state.page = 1; loadEvents(); };
+$('reset').onclick = () => { document.querySelectorAll('aside input, aside select:not(#site)').forEach((el) => (el.value = '')); state.page = 1; loadEvents(); };
+$('q').onkeydown = (ev) => { if (ev.key === 'Enter') $('apply').click(); };
+$('tbl').onclick = (ev) => {
+  const a = ev.target.closest('a[data-id]'); if (a) { ev.preventDefault(); showEvent(a.dataset.id); return; }
+  const th = ev.target.closest('th[data-sort]');
+  if (th) { state.dir = state.sort === th.dataset.sort && state.dir === 'desc' ? 'asc' : 'desc'; state.sort = th.dataset.sort; loadEvents(); }
+};
+$('pager').onclick = (ev) => { const b = ev.target.closest('button[data-p]'); if (b) { state.page = Number(b.dataset.p); loadEvents(); } };
+async function startCrawl(site) {
+  if (STATIC) {
+    try { await api('/api/crawl', { method: 'POST', body: JSON.stringify({ site }) }); alert('已通知 GitHub 開始抓取，約 2～10 分鐘後重新整理頁面就會看到新資料。'); }
+    catch (e) { alert(errMsg(e)); }
+    return;
+  }
+  await api('/api/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ site }) });
+  const poll = setInterval(async () => {
+    if (!(await loadRuns())) { clearInterval(poll); await loadSites(); refreshAll(); if ($('sitesDlg').open) renderSiteTable(); }
+  }, 5000);
+  loadRuns();
+}
+$('crawlBtn').onclick = () => startCrawl($('site').value);
+
+// ---- 網站管理 ----
+const post = (u, body, method = 'POST') => api(u, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+let editingId = null, lastPreview = null;
+
+function renderSiteTable() {
+  $('siteTbl').innerHTML = '<tr><th>網站</th><th>活動數</th><th>每天自動抓</th><th>最後抓取</th><th></th></tr>' + siteList.map((s) => {
+    const r = s.lastRun;
+    const run = r ? `${esc(r.started_at.slice(5, 16))} ${r.status === 'done' ? `+${r.new_count} / *${r.updated_count}` : r.status === 'failed' ? `<span class="err" title="${esc(r.error)}">失敗</span>` : esc(r.status)}` : '—';
+    return `<tr><td>${esc(s.name)}<div class="muted">${esc(s.baseUrl)}${s.custom ? '' : '（內建）'}${s.configured === false ? '<span class="err">（未設定信箱，請看 README）</span>' : ''}</div></td><td>${s.count}</td>
+      <td>${s.custom ? `<input type="checkbox" data-toggle="${s.id}" ${s.enabled ? 'checked' : ''} style="width:auto">` : (s.enabled ? '是' : '否')}</td>
+      <td class="t">${run}</td>
+      <td class="actions"><button data-crawl="${s.id}">抓取</button>${s.custom ? ` <button data-edit="${s.id}">編輯</button> <button data-del="${s.id}">刪除</button>` : ''}</td></tr>`;
+  }).join('');
+}
+
+function resetForm() {
+  editingId = null; lastPreview = null;
+  $('formTitle').textContent = '新增網站';
+  for (const k of ['name', 'listUrl', 'linkPattern', 'titleSelector', 'contentSelector']) $(`sf_${k}`).value = '';
+  $('sf_volatile').value = '';
+  $('sf_maxPages').value = 5; $('sf_fetchDetail').checked = true; $('sf_trackDescription').checked = false; $('sf_encoding').value = 'auto';
+  $('sf_analysis').innerHTML = ''; $('sf_preview').innerHTML = ''; $('sf_msg').innerHTML = '';
+}
+
+function formConfig() {
+  return {
+    name: $('sf_name').value.trim(), listUrl: $('sf_listUrl').value.trim(), linkPattern: $('sf_linkPattern').value.trim(),
+    maxPages: Number($('sf_maxPages').value) || 5, fetchDetail: $('sf_fetchDetail').checked,
+    titleSelector: $('sf_titleSelector').value.trim(), contentSelector: $('sf_contentSelector').value.trim(),
+    trackDescription: $('sf_trackDescription').checked, encoding: $('sf_encoding').value,
+    // 沒有預覽（例如分析失敗）時不送，避免把原本的設定清掉
+    volatileFields: STATIC ? $('sf_volatile').value.split(/[,，、]/).map((x) => x.trim()).filter(Boolean)
+      : document.querySelector('#sf_preview input[data-vol]')
+      ? [...document.querySelectorAll('#sf_preview input[data-vol]:checked')].map((c) => c.dataset.vol) : undefined,
+  };
+}
+
+function renderPreview(r, volatile = []) {
+  const cands = r.candidates.map((c) => `<div class="cand ${c.pattern === r.linkPattern ? 'sel' : ''}" data-pattern="${esc(c.pattern)}"><code>${esc(c.pattern)}</code>（${c.count} 個連結）<div class="muted">${c.samples.slice(0, 3).map(esc).join('｜')}</div></div>`).join('');
+  $('sf_analysis').innerHTML = (r.candidates.length ? `<div class="hint">找到的活動連結規則（點選切換，會重新預覽）：</div>${cands}` : '<div class="err">找不到重複出現的活動連結。可能原因：① 貼的是首頁，不是「活動列表頁」，請到網站上點進「最新活動 / 活動列表」，再複製那一頁的網址；② 列表是用 JavaScript 動態載入的（例如 104、Accupass），這類網站無法抓取。</div>') +
+    (r.pageTemplate && !$('sf_listUrl').value.includes('{page}') ? `<div class="hint">偵測到分頁：<code>${esc(r.pageTemplate)}</code> <button id="sf_usePage">使用分頁網址</button></div>` : '') +
+    (!$('sf_listUrl').value.includes('{page}') && !r.pageTemplate ? '<div class="hint">沒有偵測到分頁，只會抓這一頁。</div>' : '');
+  if (!$('sf_name').value && r.title) $('sf_name').value = r.title.slice(0, 40);
+  $('sf_linkPattern').value = r.linkPattern ?? '';
+  const keys = [...new Set(r.details.flatMap((d) => Object.keys(d.fields ?? {})).concat(r.items.flatMap((i) => Object.keys(i.fields))))];
+  $('sf_preview').innerHTML = r.items.length ? `<b>預覽：第 1 頁抓到 ${r.items.length} 個活動</b>
+    <div class="preview">${r.items.map((i) => `<div>・<a href="${esc(i.url)}" target="_blank">${esc(i.name)}</a></div>`).join('')}</div>
+    ${keys.length ? `<b style="display:block;margin-top:8px">抓到的欄位（前 ${r.details.length} 個活動）。勾選「每天會變」的欄位（例如剩餘名額、瀏覽次數），這些欄位變動不算修改：</b>
+    <div class="preview"><table><tr><th>欄位</th><th>範例值</th><th>每天會變</th></tr>${keys.map((k) => `<tr><td>${esc(k)}</td><td>${r.details.map((d) => esc(d.fields?.[k] ?? '')).filter(Boolean).slice(0, 2).join('｜')}</td><td><input type="checkbox" data-vol="${esc(k)}" ${volatile.includes(k) ? 'checked' : ''} style="width:auto"></td></tr>`).join('')}</table></div>` : '<div class="hint">沒有抓到「標籤：值」格式的欄位，仍會記錄活動名稱和新增/修改時間。</div>'}
+    ${r.details.filter((d) => d.error).map((d) => `<div class="err">詳細頁失敗：${esc(d.name)}：${esc(d.error)}</div>`).join('')}` : '';
+}
+
+async function analyze(volatile) {
+  if (STATIC) return;
+  const cfg = formConfig();
+  if (!cfg.listUrl) { $('sf_msg').innerHTML = '<span class="err">請輸入列表網址</span>'; return; }
+  $('sf_msg').textContent = '分析中…（會實際抓列表頁和前 3 個活動）';
+  $('sf_analyze').disabled = true;
+  try {
+    lastPreview = await post('/api/site-configs/preview', cfg);
+    renderPreview(lastPreview, volatile ?? cfg.volatileFields);
+    $('sf_msg').textContent = '';
+  } catch (e) {
+    $('sf_msg').innerHTML = `<span class="err">${esc(errMsg(e))}</span>`;
+  } finally { $('sf_analyze').disabled = false; }
+}
+
+$('sitesBtn').onclick = async () => { await loadSites(); renderSiteTable(); resetForm(); $('sitesDlg').showModal(); };
+$('sitesClose').onclick = () => $('sitesDlg').close();
+$('sf_analyze').onclick = () => analyze();
+$('sf_cancel').onclick = resetForm;
+$('clearToken').onclick = (ev) => { ev.preventDefault(); try { localStorage.removeItem('gh_token'); } catch {} alert('已清除。'); };
+$('sf_analysis').onclick = (ev) => {
+  const c = ev.target.closest('.cand');
+  if (c) { $('sf_linkPattern').value = c.dataset.pattern; analyze(); }
+  if (ev.target.id === 'sf_usePage') { $('sf_listUrl').value = lastPreview.pageTemplate; analyze(); }
+};
+$('sf_save').onclick = async () => {
+  const cfg = formConfig();
+  try {
+    const r = editingId ? await post(`/api/site-configs/${editingId}`, cfg, 'PUT') : await post('/api/site-configs', cfg);
+    const id = editingId ?? r.id;
+    await loadSites(id);
+    renderSiteTable();
+    resetForm();
+    if (STATIC) { $('sf_msg').textContent = '已儲存到 GitHub，系統會自動開始抓取（約 2～10 分鐘），完成後重新整理頁面就會看到這個網站。'; return; }
+    $('sf_msg').textContent = '已儲存。';
+    if (confirm('已儲存。要現在先抓一次嗎？')) { startCrawl(id); $('sitesDlg').close(); refreshAll(); }
+  } catch (e) {
+    $('sf_msg').innerHTML = `<span class="err">${esc(errMsg(e))}</span>`;
+  }
+};
+$('siteTbl').onclick = async (ev) => {
+  const b = ev.target.closest('button');
+  const t = ev.target.closest('input[data-toggle]');
+  if (t) { await post(`/api/site-configs/${t.dataset.toggle}`, { enabled: t.checked }, 'PUT'); await loadSites(); return; }
+  if (!b) return;
+  if (b.dataset.crawl) { startCrawl(b.dataset.crawl); b.textContent = '抓取中…'; b.disabled = true; }
+  if (b.dataset.edit) {
+    const s = siteList.find((x) => x.id === b.dataset.edit);
+    resetForm(); editingId = s.id;
+    $('formTitle').textContent = `編輯網站：${s.name}`;
+    $('sf_name').value = s.name;
+    for (const k of ['listUrl', 'linkPattern', 'titleSelector', 'contentSelector', 'maxPages']) $(`sf_${k}`).value = s.config[k] ?? (k === 'maxPages' ? 5 : '');
+    $('sf_fetchDetail').checked = s.config.fetchDetail !== false;
+    $('sf_trackDescription').checked = !!s.config.trackDescription;
+    $('sf_encoding').value = s.config.encoding || 'auto';
+    $('sf_volatile').value = (s.config.volatileFields ?? []).join(', ');
+    $('formTitle').scrollIntoView({ behavior: 'smooth' });
+    analyze(s.config.volatileFields ?? []);
+  }
+  if (b.dataset.del) {
+    const s = siteList.find((x) => x.id === b.dataset.del);
+    if (!confirm(`刪除「${s.name}」？`)) return;
+    const purge = !STATIC && confirm('連同已抓到的活動資料一起刪除嗎？\n按「確定」全部刪除；按「取消」只刪除網站設定，保留資料。');
+    await api(`/api/site-configs/${s.id}?purge=${purge ? 1 : 0}`, { method: 'DELETE' });
+    await loadSites(); renderSiteTable(); refreshAll();
+  }
+};
+
+initStatic().then(() => loadSites()).then(refreshAll).catch((e) => ($('summary').textContent = '載入失敗：' + errMsg(e)));
+</script>
+</body>
+</html>

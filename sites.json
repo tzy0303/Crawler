@@ -1,0 +1,14 @@
+[
+  {
+    "id": "huashan1914-com",
+    "name": "華山1914 展演活動",
+    "enabled": true,
+    "listUrl": "https://www.huashan1914.com/exhibition?page={page}",
+    "linkPattern": "www.huashan1914.com/exhibition/*",
+    "fetchDetail": true,
+    "maxPages": 2,
+    "initialPages": 2,
+    "trackDescription": false,
+    "volatileFields": []
+  }
+]

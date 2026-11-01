@@ -1,0 +1,89 @@
+# 雲端每日抓取：GitHub Actions 跑爬蟲 → 資料庫存到 data 分支 → 發佈網頁到 GitHub Pages
+name: 每日抓取
+
+on:
+  schedule:
+    - cron: '0 22 * * *'   # UTC 22:00 = 台灣 06:00（GitHub 排程可能延遲幾分鐘到一小時）
+  workflow_dispatch:
+    inputs:
+      site:
+        description: '只抓某個網站 id（空白 = 全部啟用的網站）'
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths: ['sites.json']  # 網頁新增/修改網站後立刻抓一次
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      TZ: Asia/Taipei
+      DB_FILE: ${{ github.workspace }}/db/crawler.db
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: 取回資料庫（data 分支）
+        run: |
+          mkdir -p db
+          if git fetch --depth=1 origin data; then
+            git show origin/data:crawler.db > db/crawler.db
+            ls -la db
+          else
+            echo "還沒有 data 分支，從空資料庫開始"
+          fi
+
+      - name: 抓取
+        continue-on-error: true
+        env:
+          SITE: ${{ github.event.inputs.site }}
+          # 104 職缺通知信：repo Settings → Secrets and variables → Actions 設定（沒設定就略過）
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
+          IMAP_MAILBOX: ${{ secrets.IMAP_MAILBOX }}
+        run: |
+          if [ -n "$SITE" ]; then
+            node --disable-warning=ExperimentalWarning src/crawl.js --site "$SITE"
+          else
+            node --disable-warning=ExperimentalWarning src/crawl.js
+          fi
+
+      - name: 存回資料庫（data 分支只保留最新一份）
+        run: |
+          cd db
+          rm -rf .git logs crawler.db-wal crawler.db-shm
+          git init -q -b data
+          git add crawler.db
+          git -c user.name="crawler-bot" -c user.email="crawler-bot@users.noreply.github.com" commit -qm "data $(date '+%F %T')"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
+
+      - name: 匯出網頁
+        run: node --disable-warning=ExperimentalWarning src/export.js _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

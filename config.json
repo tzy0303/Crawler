@@ -1,0 +1,17 @@
+{
+  "port": 5190,
+  "crawlTime": "06:00",
+  "dbFile": "data/crawler.db",
+  "sites": {
+    "beclass": {
+      "enabled": true,
+      "maxPages": 30,
+      "initialPages": 20
+    },
+    "mail104": {
+      "enabled": true,
+      "sinceDays": 3,
+      "initialDays": 30
+    }
+  }
+}
