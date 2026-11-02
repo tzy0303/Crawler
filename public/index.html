@@ -417,10 +417,10 @@ async function loadEvents() {
   const body = data.rows.map((r) => {
     const isNew = lastRun && r.created_run === lastRun.id;
     const isUpd = lastRun && r.updated_run === lastRun.id && r.created_run !== r.updated_run;
-    return `<tr><td class="name">${isNew ? '<span class="badge b-new">新</span>' : ''}${isUpd ? '<span class="badge b-upd">改</span>' : ''}<a href="#" data-id="${r.id}">${esc(r.name)}</a> <a href="${esc(r.url)}" target="_blank" rel="noopener" title="原網頁">↗</a></td>` +
+    return `<tr><td class="name">${isNew ? '<span class="badge b-new">新</span>' : ''}${isUpd ? '<span class="badge b-upd">改</span>' : ''}<a href="${esc(r.url)}" target="_blank" rel="noopener" title="到原網站">${esc(r.name)} ↗</a></td>` +
       cols.map((c) => `<td data-l="${esc(c)}">${esc(r.fields[c])}</td>`).join('') +
       timeCell(r.first_seen, '首次出現') + timeCell(r.latest, '最新更新') +
-      `<td data-l="歷史時間點"><button class="hist" data-id="${r.id}" title="${esc(r.timeline.join('\n'))}">${r.timeline.length} 個</button></td></tr>`;
+      `<td data-l="歷史時間點"><button class="hist" data-id="${r.id}" title="查看詳情與修改紀錄&#10;${esc(r.timeline.join('\n'))}">${r.timeline.length} 個・詳情</button></td></tr>`;
   }).join('');
   let empty = '';
   if (!data.total) {
