@@ -209,8 +209,11 @@ async function initStatic() {
   if (STATIC.encrypted) {
     // 有設網站密碼：資料加密在 data.enc，登入後在瀏覽器解密
     const C = await import('./shared/crypto.js');
-    const enc = new Uint8Array(await (await fetch('data.enc', { cache: 'no-store' })).arrayBuffer());
-    const { json, db } = C.unpackBundle(await login((pw) => C.decryptBytes(enc, pw)));
+    // 有 version 時讓瀏覽器快取：資料沒更新就不用重新下載
+    const enc = new Uint8Array(await (await fetch(STATIC.version ? `data.enc?v=${encodeURIComponent(STATIC.version)}` : 'data.enc', { cache: STATIC.version ? 'default' : 'no-store' })).arrayBuffer());
+    const gunzip = async (bytes) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+    const decrypted = await login((pw) => C.decryptBytes(enc, pw));
+    const { json, db } = C.unpackBundle(STATIC.compressed === 'gzip' ? await gunzip(decrypted) : decrypted);
     STATIC = json;
     dbBytes = db;
     $('logoutBtn').hidden = false;
