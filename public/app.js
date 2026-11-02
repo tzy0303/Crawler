@@ -25,8 +25,10 @@ async function initStatic() {
     // CRW2：金鑰＝密碼＋網站固定鹽，瀏覽器只記住不可匯出的金鑰；舊格式（CRW1）只能每次輸入密碼
     const v2 = STATIC.format === 'CRW2';
     const decrypted = v2
-      ? await login((key) => C.decryptWithKey(enc, key), (pw) => C.deriveSiteKey(pw, STATIC.salt), true)
+      ? await login((key) => C.decryptWithKey(enc, key).then((d) => { SITE_KEY = key; return d; }), (pw) => C.deriveSiteKey(pw, STATIC.salt), true)
       : await login((pw) => C.decryptBytes(enc, pw), async (pw) => pw, false);
+    CRYPTO = C;
+    await migrateGhToken();
     const { json, db } = C.unpackBundle(STATIC.compressed === 'gzip' ? await gunzip(decrypted) : decrypted);
     STATIC = json;
     dbBytes = db;
@@ -96,7 +98,8 @@ async function login(decrypt, derive, canRemember) {
 // 登出：清掉記住的金鑰和 GitHub 權杖
 $('logoutBtn').onclick = async () => {
   await clearKeys();
-  try { localStorage.removeItem('gh_token'); localStorage.removeItem('site_pw'); sessionStorage.removeItem('site_pw'); } catch {}
+  forgetGhToken();
+  try { localStorage.removeItem('site_pw'); sessionStorage.removeItem('site_pw'); } catch {}
   location.reload();
 };
 
@@ -124,23 +127,53 @@ function newId(listUrl, list) {
   return id;
 }
 
+/**
+ * GitHub 權杖：用登入後的網站金鑰加密才存（gh_token_enc），沒登入網站就解不開；
+ * 沒有網站金鑰時（未設網站密碼）只放在記憶體，不寫進瀏覽器。舊版的明文 gh_token 登入後自動轉成加密版。
+ */
+let SITE_KEY = null, CRYPTO = null;
+const b64 = (bytes) => btoa(String.fromCharCode(...bytes));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const forgetGhToken = () => { gh.memToken = null; try { localStorage.removeItem('gh_token'); localStorage.removeItem('gh_token_enc'); } catch {} };
+async function storeGhToken(t) {
+  gh.memToken = t;
+  try {
+    localStorage.removeItem('gh_token');
+    if (SITE_KEY && CRYPTO) localStorage.setItem('gh_token_enc', b64(await CRYPTO.encryptWithKey(new TextEncoder().encode(t), SITE_KEY)));
+  } catch {}
+}
+async function migrateGhToken() {
+  let plain = null;
+  try { plain = localStorage.getItem('gh_token'); } catch {}
+  if (plain) await storeGhToken(plain);
+}
+async function loadGhToken() {
+  if (gh.memToken) return gh.memToken;
+  let enc = null;
+  try { enc = localStorage.getItem('gh_token_enc'); } catch {}
+  if (enc && SITE_KEY && CRYPTO) {
+    try { return (gh.memToken = new TextDecoder().decode(await CRYPTO.decryptWithKey(unb64(enc), SITE_KEY))); } catch { forgetGhToken(); }
+  }
+  return null;
+}
+
 const gh = {
-  token() {
-    let t = '';
-    try { t = localStorage.getItem('gh_token') || ''; } catch {}
+  memToken: null,
+  async token() {
+    let t = await loadGhToken();
     if (!t) {
-      t = (prompt('請貼上 GitHub 權杖（Fine-grained token：此 repo 的 Contents、Actions 讀寫權限）。\n只會存在這台電腦的瀏覽器裡。') || '').trim();
+      t = (prompt('請貼上 GitHub 權杖（Fine-grained token：此 repo 的 Contents、Actions 讀寫權限）。\n會用網站密碼加密後才存在這台電腦的瀏覽器裡。') || '').trim();
       if (!t) throw fail('需要 GitHub 權杖才能修改網站或觸發抓取');
-      try { localStorage.setItem('gh_token', t); } catch {}
+      await storeGhToken(t);
     }
     return t;
   },
   async call(path, opt = {}, allow404 = false) {
     if (!STATIC.repo) throw fail('這份網頁沒有設定 GitHub repo，無法修改');
     const r = await fetch(`https://api.github.com/repos/${STATIC.repo}${path}`, { ...opt, headers: {
-      Accept: 'application/vnd.github+json', Authorization: `Bearer ${this.token()}`, 'X-GitHub-Api-Version': '2022-11-28',
+      Accept: 'application/vnd.github+json', Authorization: `Bearer ${await this.token()}`, 'X-GitHub-Api-Version': '2022-11-28',
       ...(opt.body ? { 'Content-Type': 'application/json' } : {}) } });
-    if (r.status === 401) { try { localStorage.removeItem('gh_token'); } catch {} throw fail('GitHub 權杖無效或過期，請重新操作並輸入新的權杖'); }
+    if (r.status === 401) { forgetGhToken(); throw fail('GitHub 權杖無效或過期，請重新操作並輸入新的權杖'); }
     if (r.status === 404 && allow404) return null;
     if (!r.ok) throw fail(`GitHub ${r.status}：${(await r.json().catch(() => ({}))).message ?? ''}（請確認權杖有 Contents、Actions 寫入權限）`);
     return r.status === 204 ? {} : r.json();
@@ -468,7 +501,7 @@ $('sitesBtn').onclick = async () => { await loadSites(); renderSiteTable(); rese
 $('sitesClose').onclick = () => $('sitesDlg').close();
 $('sf_analyze').onclick = () => analyze();
 $('sf_cancel').onclick = resetForm;
-$('clearToken').onclick = (ev) => { ev.preventDefault(); try { localStorage.removeItem('gh_token'); } catch {} alert('已清除。'); };
+$('clearToken').onclick = (ev) => { ev.preventDefault(); forgetGhToken(); alert('已清除。'); };
 $('sf_analysis').onclick = (ev) => {
   const c = ev.target.closest('.cand');
   if (c) { $('sf_linkPattern').value = c.dataset.pattern; analyze(); }
