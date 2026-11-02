@@ -9,7 +9,7 @@ import { runCrawl } from './core/crawler.js';
 import { fetchHtml } from './core/fetcher.js';
 import { readSitesFile, writeSitesFile } from './core/sites-file.js';
 import { markStaleRuns, openDb, tx } from './core/store.js';
-import { getEvent, getSiteFields, listRuns, queryEvents, siteStats } from './shared/query.js';
+import { getEvent, getSiteFields, listRuns, queryEvents, siteStats, siteSummary } from './shared/query.js';
 import { startDailyScheduler } from './scheduler.js';
 
 const db = openDb(config.dbFile);
@@ -225,6 +225,7 @@ async function handle(req, res) {
     return ev ? json(res, 200, ev) : json(res, 404, { error: 'not found' });
   }
   if (path === '/api/runs') return json(res, 200, listRuns(db, p.get('site'), p.get('limit')));
+  if (path === '/api/summary') return json(res, 200, siteSummary(db, p.get('site')));
   if (path === '/api/status') {
     return json(res, 200, { crawling: !!crawling, crawlTime: config.crawlTime, nextRunAt: scheduler.state.nextRunAt });
   }

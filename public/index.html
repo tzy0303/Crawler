@@ -5,37 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>活動更新爬蟲</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --new:#16a34a; --upd:#d97706; }
+  :root { --bg:#f4f6f9; --card:#fff; --text:#1f2328; --muted:#6b7280; --line:#e5e7eb; --soft:#f9fafb; --accent:#2563eb; --accent-soft:#eff6ff;
+          --new:#16a34a; --upd:#d97706; --err:#dc2626; --shadow:0 1px 2px rgba(0,0,0,.04), 0 1px 8px rgba(0,0,0,.04); }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#171a21; --text:#e6e8eb; --muted:#9aa3ad; --line:#2a2f3a; --soft:#1d212a; --accent:#5b8def; --accent-soft:#1c2740;
+            --new:#22c55e; --upd:#f59e0b; --err:#f87171; --shadow:none; }
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.5 system-ui, "Microsoft JhengHei", sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); }
-  header h1 { font-size:18px; margin:0 12px 0 0; }
+  body { margin:0; font:14px/1.55 system-ui, "Microsoft JhengHei", "PingFang TC", sans-serif; background:var(--bg); color:var(--text); }
+  header { position:sticky; top:0; z-index:10; display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0 6px 0 0; white-space:nowrap; }
   .muted { color:var(--muted); font-size:12px; }
-  main { display:grid; grid-template-columns: 280px 1fr; gap:16px; padding:16px; }
-  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
-  aside, section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; }
-  aside h3 { font-size:13px; margin:14px 0 6px; color:var(--muted); }
+  .wrap { padding:16px; max-width:1500px; margin:0 auto; }
+  .cards { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+  @media (max-width: 800px) { .cards { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; box-shadow:var(--shadow); cursor:default; }
+  .card.click { cursor:pointer; } .card.click:hover { border-color:var(--accent); }
+  .card .n { font-size:24px; font-weight:700; line-height:1.2; }
+  .card .l { font-size:12px; color:var(--muted); }
+  main { display:grid; grid-template-columns: 290px minmax(0,1fr); gap:16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } main section { order:-1; } }
+  aside, section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow); }
+  aside h3 { font-size:13px; margin:16px 0 6px; color:var(--muted); }
   aside h3:first-child { margin-top:0; }
   label { display:block; font-size:12px; color:var(--muted); margin-top:8px; }
-  input, select, button { font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; width:100%; }
+  input, select, button { font:inherit; padding:6px 9px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); width:100%; }
+  input:focus, select:focus { outline:2px solid var(--accent-soft); border-color:var(--accent); }
   .row { display:flex; gap:6px; } .row > * { flex:1; min-width:0; }
   button { cursor:pointer; width:auto; }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button:disabled { opacity:.55; cursor:default; }
   button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { padding:3px 10px; border-radius:999px; font-size:12px; }
+  .chip.on { background:var(--accent); color:#fff; border-color:var(--accent); }
   table { width:100%; border-collapse:collapse; }
-  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { font-size:12px; color:var(--muted); cursor:pointer; white-space:nowrap; }
-  td.t { white-space:nowrap; font-size:12px; color:var(--muted); }
-  tr:hover td { background:#f9fafb; }
-  a { color:var(--accent); text-decoration:none; }
-  .badge { display:inline-block; font-size:11px; padding:0 6px; border-radius:10px; color:#fff; margin-right:4px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); white-space:nowrap; position:sticky; top:0; background:var(--card); }
+  th[data-sort] { cursor:pointer; } th[data-sort]:hover { color:var(--accent); }
+  td.t { white-space:nowrap; font-size:12px; }
+  td.t .abs { color:var(--muted); font-size:11px; }
+  #tbl tr:hover td { background:var(--soft); }
+  a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+  .badge { display:inline-block; font-size:11px; padding:0 7px; border-radius:10px; color:#fff; margin-right:4px; vertical-align:1px; }
   .b-new { background:var(--new); } .b-upd { background:var(--upd); }
+  .hist { font-size:12px; border:1px solid var(--line); border-radius:999px; padding:1px 8px; background:var(--soft); color:var(--text); }
   .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap; }
+  .toolbar .right { display:flex; gap:6px; flex-wrap:wrap; }
   .pager button { margin-left:4px; }
-  dialog { max-width:760px; width:92vw; border:1px solid var(--line); border-radius:10px; }
-  dialog pre { white-space:pre-wrap; max-height:240px; overflow:auto; background:var(--bg); padding:8px; border-radius:6px; }
+  .loading { padding:24px; text-align:center; color:var(--muted); }
+  .empty { padding:28px 16px; text-align:center; color:var(--muted); }
+  dialog { max-width:800px; width:94vw; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); }
+  dialog::backdrop { background:rgba(0,0,0,.35); }
+  dialog pre { white-space:pre-wrap; max-height:240px; overflow:auto; background:var(--soft); padding:8px; border-radius:6px; }
+  .timeline { list-style:none; padding:0; margin:6px 0; }
+  .timeline li { position:relative; padding:0 0 10px 18px; border-left:2px solid var(--line); margin-left:6px; }
+  .timeline li::before { content:''; position:absolute; left:-6px; top:4px; width:10px; height:10px; border-radius:50%; background:var(--accent); }
+  .timeline li.first::before { background:var(--new); } .timeline li.last { border-left-color:transparent; }
+  .timeline li li { border:none; padding:0; margin:0 0 0 18px; list-style:disc; color:var(--muted); }
+  .timeline li li::before { display:none; }
+  td[data-l="地區"], td[data-l="縣市"] { white-space:nowrap; }
   .runs { font-size:12px; }
   .runs td { padding:4px 6px; }
-  .tablewrap { overflow-x:auto; }
+  .tablewrap { overflow:auto; max-height:calc(100vh - 220px); }
   #sitesDlg { max-width:980px; }
   .form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:4px 12px; }
   @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } }
@@ -43,13 +75,22 @@
   .check { display:flex; gap:6px; align-items:center; color:var(--text); font-size:13px; }
   .check input { width:auto; }
   .cand { border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin:4px 0; cursor:pointer; font-size:12px; }
-  .cand.sel { border-color:var(--accent); background:#eff6ff; }
+  .cand.sel { border-color:var(--accent); background:var(--accent-soft); }
   .cand code { font-weight:600; }
   .hint { font-size:12px; color:var(--muted); margin:4px 0; }
-  .err { color:#dc2626; font-size:13px; }
+  .err { color:var(--err); font-size:13px; }
   .preview { max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:6px; margin-top:6px; font-size:12px; }
   details summary { cursor:pointer; color:var(--muted); font-size:12px; margin-top:8px; }
   .actions button { padding:3px 8px; font-size:12px; }
+  /* 手機：表格改卡片 */
+  @media (max-width: 700px) {
+    .tablewrap { max-height:none; }
+    #tbl thead { display:none; }
+    #tbl tr { display:block; border:1px solid var(--line); border-radius:10px; margin-bottom:10px; padding:8px 10px; }
+    #tbl td { display:flex; gap:8px; border:none; padding:3px 0; }
+    #tbl td[data-l]::before { content:attr(data-l); color:var(--muted); font-size:12px; min-width:64px; }
+    #tbl td.name { display:block; font-size:15px; font-weight:600; }
+  }
   #loginBox { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:100; padding:16px; }
   #loginBox[hidden] { display:none; }
   #loginBox form { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; width:100%; max-width:340px; }
@@ -63,37 +104,56 @@
 <body>
 <header>
   <h1>活動更新爬蟲</h1>
-  <select id="site" style="width:auto"></select>
+  <select id="site" style="width:auto;max-width:280px"></select>
   <span id="status" class="muted"></span>
   <span style="flex:1"></span>
   <button id="logoutBtn" hidden>登出</button>
   <button id="sitesBtn">網站管理</button>
   <button id="crawlBtn" class="primary">立即抓取此網站</button>
 </header>
-<main>
-  <aside>
-    <h3>共同條件</h3>
-    <label>名稱 / 說明關鍵字</label><input id="q" placeholder="例如：健行">
-    <label>新增時間</label><div class="row"><input type="date" id="created_from"><input type="date" id="created_to"></div>
-    <label>修改時間</label><div class="row"><input type="date" id="updated_from"><input type="date" id="updated_to"></div>
-    <label>變動</label>
-    <select id="kind">
-      <option value="">全部</option>
-      <option value="lastnew">最近一次抓取新增</option>
-      <option value="lastupd">最近一次抓取修改</option>
-      <option value="updated">曾經修改過</option>
-    </select>
-    <h3>網站欄位（依網站自動產生）</h3>
-    <div id="dynFilters"><span class="muted">尚無資料，先抓取一次</span></div>
-    <div class="row" style="margin-top:12px"><button id="apply" class="primary">篩選</button><button id="reset">清除</button></div>
-    <h3>最近抓取紀錄</h3>
-    <table class="runs" id="runs"></table>
-  </aside>
-  <section>
-    <div class="toolbar"><span id="summary" class="muted"></span><span class="pager" id="pager"></span></div>
-    <div class="tablewrap"><table id="tbl"></table></div>
-  </section>
-</main>
+<div class="wrap">
+  <div class="cards">
+    <div class="card click" data-quick="all" title="顯示全部"><div class="n" id="c_total">–</div><div class="l">總筆數</div></div>
+    <div class="card click" data-quick="today" title="只看今天新增"><div class="n" id="c_new" style="color:var(--new)">–</div><div class="l">今天新增</div></div>
+    <div class="card click" data-quick="todayupd" title="只看今天更新"><div class="n" id="c_upd" style="color:var(--upd)">–</div><div class="l">今天更新</div></div>
+    <div class="card"><div class="n" id="c_run" style="font-size:15px">–</div><div class="l" id="c_run_l">最近一次抓取</div></div>
+  </div>
+  <main>
+    <aside>
+      <h3>快速篩選</h3>
+      <div class="chips" id="quick">
+        <button class="chip" data-quick="all">全部</button>
+        <button class="chip" data-quick="today">今天新增</button>
+        <button class="chip" data-quick="week">近 7 天新增</button>
+        <button class="chip" data-quick="todayupd">今天更新</button>
+        <button class="chip" data-quick="updated">有更新過</button>
+      </div>
+      <h3>共同條件</h3>
+      <label>名稱 / 說明關鍵字</label><input id="q" placeholder="例如：健行">
+      <label>首次出現</label><div class="row"><input type="date" id="created_from"><input type="date" id="created_to"></div>
+      <label>最新更新</label><div class="row"><input type="date" id="updated_from"><input type="date" id="updated_to"></div>
+      <label>變動</label>
+      <select id="kind">
+        <option value="">全部</option>
+        <option value="lastnew">最近一次抓取新增</option>
+        <option value="lastupd">最近一次抓取修改</option>
+        <option value="updated">曾經修改過</option>
+      </select>
+      <h3>網站欄位（依網站自動產生）</h3>
+      <div id="dynFilters"><span class="muted">尚無資料，先抓取一次</span></div>
+      <div class="row" style="margin-top:12px"><button id="apply" class="primary">篩選</button><button id="reset">清除</button></div>
+      <h3>最近抓取紀錄</h3>
+      <table class="runs" id="runs"></table>
+    </aside>
+    <section>
+      <div class="toolbar">
+        <span id="summary" class="muted"></span>
+        <span class="right"><button id="dlCsv" title="下載目前篩選結果（含首次出現、最新更新、歷史時間點）">下載 CSV</button><button id="dlJson" title="歷史時間點是陣列">下載 JSON</button><span class="pager" id="pager"></span></span>
+      </div>
+      <div class="tablewrap"><table id="tbl"></table></div>
+    </section>
+  </main>
+</div>
 <div id="loginBox" hidden>
   <form id="loginForm">
     <h2>活動更新爬蟲</h2>
@@ -261,6 +321,7 @@ async function staticApi(u, opt = {}) {
   if (path === '/api/events') return Q.queryEvents(wrapDb, p);
   if ((m = path.match(/^\/api\/events\/(\d+)$/))) return Q.getEvent(wrapDb, m[1]);
   if (path === '/api/runs') return Q.listRuns(wrapDb, p.get('site'), p.get('limit'));
+  if (path === '/api/summary') return Q.siteSummary(wrapDb, p.get('site'));
   if (path === '/api/status') return { crawling: false, crawlTime: STATIC.crawlTime, nextRunAt: null };
   if (path === '/api/crawl') { await gh.dispatch(body.site); return { started: true }; }
   if (path === '/api/site-configs/preview') throw fail('雲端版無法即時預覽（瀏覽器不能直接讀取其他網站）。儲存後，GitHub 抓取時會自動判斷活動連結和分頁。');
@@ -320,42 +381,75 @@ function buildFilters() {
   return out;
 }
 
-async function loadEvents() {
-  const p = new URLSearchParams({ site: $('site').value, page: state.page, sort: state.sort, dir: state.dir, size: 50 });
+/** 台灣時間字串 → 相對時間（3 小時前） */
+function rel(ts) {
+  if (!ts) return '';
+  const d = new Date(ts.replace(' ', 'T') + '+08:00');
+  const sec = (Date.now() - d) / 1000;
+  if (sec < 60) return '剛剛';
+  if (sec < 3600) return Math.floor(sec / 60) + ' 分鐘前';
+  if (sec < 86400) return Math.floor(sec / 3600) + ' 小時前';
+  if (sec < 86400 * 30) return Math.floor(sec / 86400) + ' 天前';
+  return ts.slice(0, 10);
+}
+const timeCell = (ts, label) => `<td class="t" data-l="${label}" title="${esc(ts)}">${esc(rel(ts))}<div class="abs">${esc((ts ?? '').slice(5, 16))}</div></td>`;
+
+let summaryInfo = null;
+function currentParams(extra = {}) {
+  const p = new URLSearchParams({ site: $('site').value, page: state.page, sort: state.sort, dir: state.dir, size: 50, ...extra });
   for (const k of ['q', 'created_from', 'created_to', 'updated_from', 'updated_to']) if ($(k).value) p.set(k, $(k).value);
   const kind = $('kind').value;
   if ((kind === 'lastnew' || kind === 'lastupd') && lastRun) { p.set('run', lastRun.id); p.set('kind', kind === 'lastnew' ? 'new' : 'updated'); }
   if (kind === 'updated') p.set('kind', 'updated');
   const f = buildFilters();
   if (Object.keys(f).length) p.set('filters', JSON.stringify(f));
+  return p;
+}
+
+async function loadEvents() {
+  const p = currentParams();
+  $('tbl').innerHTML = '<tbody><tr><td class="loading">讀取中…</td></tr></tbody>';
   const data = await api(`/api/events?${p}`);
   const keys = fields.filter((f) => f.type !== 'number').map((f) => f.key);
   const cols = [...keys.filter((k) => k === '地區'), ...keys.filter((k) => !['地區', '縣市', '地點'].includes(k))].slice(0, SHOW_COLS);
   const th = (key, label) => `<th data-sort="${key}">${label}${state.sort === key ? (state.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
-  $('tbl').innerHTML = `<tr>${th('name', '名稱')}${cols.map((c) => `<th>${esc(c)}</th>`).join('')}${th('created', '新增時間')}${th('updated', '修改時間')}</tr>` +
-    data.rows.map((r) => {
-      const isNew = lastRun && r.created_run === lastRun.id;
-      const isUpd = lastRun && r.updated_run === lastRun.id && r.created_run !== r.updated_run;
-      return `<tr><td>${isNew ? '<span class="badge b-new">新</span>' : ''}${isUpd ? '<span class="badge b-upd">改</span>' : ''}<a href="#" data-id="${r.id}">${esc(r.name)}</a> <a href="${esc(r.url)}" target="_blank" title="原網頁">↗</a></td>` +
-        cols.map((c) => `<td>${esc(r.fields[c])}</td>`).join('') +
-        `<td class="t">${esc(r.created_at)}</td><td class="t">${r.updated_at !== r.created_at ? esc(r.updated_at) : '—'}</td></tr>`;
-    }).join('');
-  if (!data.total && $('site').value === 'mail104' && !p.has('filters') && !p.has('q')) {
-    $('tbl').innerHTML += `<tr><td colspan="9" class="muted" style="padding:16px">還沒有職缺。系統會讀信箱裡 104 寄來的「職缺通知信」：<br>
-      1. 到 104 搜尋職缺 → 按「儲存搜尋條件」→ 開啟 email 通知。<br>
-      2. 104 通常每天寄一次，收到後隔天 ${esc(STATIC?.crawlTime ?? '06:00')} 會自動出現，也可以按右上角「立即抓取此網站」。<br>
-      （帳號驗證碼這類信件不是職缺通知，會被略過。）</td></tr>`;
+  const head = `<thead><tr>${th('name', '名稱')}${cols.map((c) => `<th>${esc(c)}</th>`).join('')}${th('created', '首次出現')}${th('updated', '最新更新')}<th title="首次出現＋每一次更新的時間">歷史時間點</th></tr></thead>`;
+  const body = data.rows.map((r) => {
+    const isNew = lastRun && r.created_run === lastRun.id;
+    const isUpd = lastRun && r.updated_run === lastRun.id && r.created_run !== r.updated_run;
+    return `<tr><td class="name">${isNew ? '<span class="badge b-new">新</span>' : ''}${isUpd ? '<span class="badge b-upd">改</span>' : ''}<a href="#" data-id="${r.id}">${esc(r.name)}</a> <a href="${esc(r.url)}" target="_blank" rel="noopener" title="原網頁">↗</a></td>` +
+      cols.map((c) => `<td data-l="${esc(c)}">${esc(r.fields[c])}</td>`).join('') +
+      timeCell(r.first_seen, '首次出現') + timeCell(r.latest, '最新更新') +
+      `<td data-l="歷史時間點"><button class="hist" data-id="${r.id}" title="${esc(r.timeline.join('\n'))}">${r.timeline.length} 個</button></td></tr>`;
+  }).join('');
+  let empty = '';
+  if (!data.total) {
+    empty = $('site').value === 'mail104' && !p.has('filters') && !p.has('q')
+      ? `<tr><td colspan="9" class="empty">還沒有職缺。系統會讀信箱裡 104 寄來的「職缺通知信」：<br>
+        到 104 搜尋職缺 → 儲存搜尋條件 →「訂閱・管理通知」選每日發送。收到後每天 ${esc(STATIC?.crawlTime ?? '12:00')} 會自動出現。</td></tr>`
+      : '<tr><td colspan="9" class="empty">沒有符合條件的資料</td></tr>';
   }
+  $('tbl').innerHTML = head + '<tbody>' + body + empty + '</tbody>';
   const pages = Math.max(1, Math.ceil(data.total / data.size));
   $('summary').textContent = `共 ${data.total} 筆，第 ${data.page} / ${pages} 頁`;
   $('pager').innerHTML = `<button ${data.page <= 1 ? 'disabled' : ''} data-p="${data.page - 1}">上一頁</button><button ${data.page >= pages ? 'disabled' : ''} data-p="${data.page + 1}">下一頁</button>`;
 }
 
+async function loadSummary() {
+  summaryInfo = await api(`/api/summary?site=${$('site').value}`);
+  $('c_total').textContent = summaryInfo.total;
+  $('c_new').textContent = summaryInfo.today_new;
+  $('c_upd').textContent = summaryInfo.today_updated;
+}
+
+const failReason = (e = '') => /HTTP 40[13]|HTTP 429/.test(e) ? '網站拒絕存取' : /登入失敗/.test(e) ? '信箱登入失敗' : /HTTP 404/.test(e) ? '找不到網址' : '錯誤';
 async function loadRuns() {
   const runs = await api(`/api/runs?site=${$('site').value}&limit=8`);
   lastRun = runs.find((r) => r.status === 'done') ?? null;
-  const failReason = (e = '') => /HTTP 40[13]|HTTP 429/.test(e) ? '網站拒絕存取' : /登入失敗/.test(e) ? '信箱登入失敗' : /HTTP 404/.test(e) ? '找不到網址' : '錯誤';
   $('runs').innerHTML = runs.map((r) => `<tr title="${esc(r.error ?? '')}"><td>${esc(r.started_at.slice(5, 16))}</td><td>${r.status === 'failed' ? `<span class="err">失敗：${esc(failReason(r.error))}</span>` : esc(r.status === 'done' ? '完成' : r.status === 'running' ? '執行中' : r.status)}</td><td>+${r.new_count} / *${r.updated_count}</td></tr>`).join('') || '<tr><td class="muted">尚未執行</td></tr>';
+  const r = runs[0];
+  $('c_run').innerHTML = r ? (r.status === 'failed' ? `<span class="err">失敗：${esc(failReason(r.error))}</span>` : `${esc(rel(r.started_at))}　+${r.new_count} / *${r.updated_count}`) : '尚未執行';
+  $('c_run_l').textContent = r ? `最近一次抓取（${r.started_at.slice(5, 16)}）` : '最近一次抓取';
   const st = await api('/api/status');
   $('status').textContent = STATIC ? `資料更新於 ${STATIC.generatedAt}｜每天 ${st.crawlTime} 由 GitHub 自動抓取` : st.crawling ? '抓取中…' : `每天 ${st.crawlTime} 自動抓取｜下次：${st.nextRunAt ?? '-'}`;
   $('crawlBtn').disabled = st.crawling;
@@ -364,22 +458,75 @@ async function loadRuns() {
 
 async function showEvent(id) {
   const e = await api(`/api/events/${id}`);
-  $('dlgBody').innerHTML = `<h3><a href="${esc(e.url)}" target="_blank">${esc(e.name)}</a></h3>
-    <p class="muted">新增：${esc(e.created_at)}｜修改：${esc(e.updated_at)}｜最後看到：${esc(e.last_seen_at)}</p>
-    <table>${Object.entries(e.fields).map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>
-    ${e.description ? `<h4>活動說明</h4><pre>${esc(e.description)}</pre>` : ''}
-    <h4>修改紀錄</h4>${e.history.length ? e.history.map((h) => `<div><b>${esc(h.changed_at)}</b><ul>${Object.entries(h.changes).map(([k, c]) => `<li>${esc(k)}：${k === '活動說明' ? '（內容變更）' : `${esc(c.from ?? '∅')} → ${esc(c.to ?? '∅')}`}</li>`).join('')}</ul></div>`).join('') : '<span class="muted">無</span>'}`;
+  const changes = [...e.history].reverse(); // 舊 → 新
+  const fmtChange = (h) => `<ul style="margin:4px 0">${Object.entries(h.changes).map(([k, c]) => `<li>${esc(k)}：${k === '活動說明' ? '（內容變更）' : `${esc(c.from ?? '∅')} → ${esc(c.to ?? '∅')}`}</li>`).join('')}</ul>`;
+  const items = [`<li class="first${changes.length ? '' : ' last'}"><b>${esc(e.first_seen)}</b>　首次出現</li>`,
+    ...changes.map((h, i) => `<li class="${i === changes.length - 1 ? 'last' : ''}"><b>${esc(h.changed_at)}</b>　更新${fmtChange(h)}</li>`)];
+  $('dlgBody').innerHTML = `<h3 style="margin-top:0"><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.name)}</a></h3>
+    <div class="cards" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div class="card"><div class="l">首次出現</div><b>${esc(e.first_seen)}</b></div>
+      <div class="card"><div class="l">最新更新</div><b>${esc(e.latest)}</b></div>
+      <div class="card"><div class="l">最後看到</div><b>${esc(e.last_seen_at)}</b></div>
+    </div>
+    <h4>歷史時間點（${e.timeline.length} 個）</h4><ul class="timeline">${items.join('')}</ul>
+    <h4>欄位</h4><table>${Object.entries(e.fields).map(([k, v]) => `<tr><th style="position:static">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>
+    ${e.description ? `<h4>活動說明</h4><pre>${esc(e.description)}</pre>` : ''}`;
   $('dlg').showModal();
 }
 
-async function refreshAll() { await loadRuns(); await loadFields(); state.page = 1; await loadEvents(); }
+/** 下載目前篩選結果：CSV（歷史時間點以 | 分隔）、JSON（歷史時間點是陣列） */
+async function download(type) {
+  const data = await api(`/api/events?${currentParams({ page: 1, size: 'all' })}`);
+  const site = $('site').value;
+  const stamp = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 16).replace(/[-: ]/g, '');
+  let blob;
+  if (type === 'json') {
+    const out = data.rows.map((r) => ({ name: r.name, url: r.url, first_seen: r.first_seen, latest: r.latest, timeline: r.timeline, last_seen: r.last_seen_at, fields: r.fields }));
+    blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+  } else {
+    const keys = [...new Set(data.rows.flatMap((r) => Object.keys(r.fields)))];
+    const cell = (v) => { const t = Array.isArray(v) ? v.join('、') : String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const lines = [['名稱', '網址', '首次出現', '最新更新', '歷史時間點', '時間點數', ...keys].map(cell).join(',')];
+    for (const r of data.rows) lines.push([r.name, r.url, r.first_seen, r.latest, r.timeline.join(' | '), r.timeline.length, ...keys.map((k) => r.fields[k])].map(cell).join(','));
+    blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${site}-${stamp}.${type}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+/** 快速篩選 */
+function quick(kind) {
+  for (const k of ['created_from', 'created_to', 'updated_from', 'updated_to']) $(k).value = '';
+  $('kind').value = '';
+  const sm = summaryInfo ?? {};
+  if (kind === 'today') $('created_from').value = sm.today ?? '';
+  if (kind === 'week') $('created_from').value = sm.week_start ?? '';
+  if (kind === 'todayupd') { $('updated_from').value = sm.today ?? ''; $('kind').value = 'updated'; }
+  if (kind === 'updated') $('kind').value = 'updated';
+  document.querySelectorAll('#quick .chip').forEach((c) => c.classList.toggle('on', c.dataset.quick === kind));
+  state.page = 1;
+  loadEvents();
+}
+document.querySelectorAll('[data-quick]').forEach((el) => (el.onclick = () => quick(el.dataset.quick)));
+$('dlCsv').onclick = () => download('csv').catch((e) => alert(errMsg(e)));
+$('dlJson').onclick = () => download('json').catch((e) => alert(errMsg(e)));
+
+async function refreshAll() {
+  await Promise.all([loadRuns(), loadFields(), loadSummary()]);
+  document.querySelectorAll('#quick .chip').forEach((c) => c.classList.toggle('on', c.dataset.quick === 'all'));
+  state.page = 1;
+  await loadEvents();
+}
 
 $('site').onchange = refreshAll;
 $('apply').onclick = () => { state.page = 1; loadEvents(); };
 $('reset').onclick = () => { document.querySelectorAll('aside input, aside select:not(#site)').forEach((el) => (el.value = '')); state.page = 1; loadEvents(); };
 $('q').onkeydown = (ev) => { if (ev.key === 'Enter') $('apply').click(); };
 $('tbl').onclick = (ev) => {
-  const a = ev.target.closest('a[data-id]'); if (a) { ev.preventDefault(); showEvent(a.dataset.id); return; }
+  const a = ev.target.closest('a[data-id], button.hist'); if (a) { ev.preventDefault(); showEvent(a.dataset.id); return; }
   const th = ev.target.closest('th[data-sort]');
   if (th) { state.dir = state.sort === th.dataset.sort && state.dir === 'desc' ? 'asc' : 'desc'; state.sort = th.dataset.sort; loadEvents(); }
 };
