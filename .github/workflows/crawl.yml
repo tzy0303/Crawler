@@ -1,4 +1,5 @@
 # 雲端每日抓取：GitHub Actions 跑爬蟲 → 資料庫存到 data 分支 → 發佈網頁到 GitHub Pages
+# 安全：密碼只給用得到的步驟；安裝套件時不執行套件腳本、拿不到任何密碼或權杖；發佈網頁的權限另開一個 job
 name: 每日抓取
 
 on:
@@ -14,10 +15,7 @@ on:
     branches: [main]
     paths: ['sites.json', 'config.json', 'src/**', 'public/**', '.github/workflows/**']  # 新增/修改網站或程式後立刻跑一次
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
+permissions: {}
 
 concurrency:
   group: crawl
@@ -27,33 +25,37 @@ jobs:
   crawl:
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      contents: write   # 只用在「存回資料庫」推 data 分支
     env:
       TZ: Asia/Taipei
       DB_FILE: ${{ github.workspace }}/db/crawler.db
-      # 網站登入密碼：有設定時，網頁和 data 分支的資料都會加密（Settings → Secrets → SITE_PASSWORD）
-      SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
-      # 104 職缺通知信（抓取和匯出都要用到；沒設定就略過）
-      IMAP_USER: ${{ secrets.IMAP_USER }}
-      IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
-      IMAP_HOST: ${{ secrets.IMAP_HOST }}
-      IMAP_MAILBOX: ${{ secrets.IMAP_MAILBOX }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # 不把權杖留在 .git/config，後面的程式和套件讀不到
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # 不執行套件的安裝腳本（目前的相依套件都不需要）；這一步沒有任何密碼
+      - run: npm ci --ignore-scripts
 
       - name: 取回資料庫（data 分支）
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: |
           mkdir -p db
-          if git fetch --depth=1 origin data; then
+          # 分辨「分支不存在」和「讀取失敗」：讀取失敗就停，不能從空資料庫開始再覆蓋掉舊資料
+          set +e; git ls-remote --exit-code --heads origin data > /dev/null; rc=$?; set -e
+          if [ $rc -eq 2 ]; then
+            echo "還沒有 data 分支，從空資料庫開始"
+          elif [ $rc -ne 0 ]; then
+            echo "讀不到 data 分支，停止"; exit 1
+          else
+            git fetch --depth=1 origin data
             if git cat-file -e origin/data:crawler.db.enc 2>/dev/null; then
               git show origin/data:crawler.db.enc > db/crawler.db.enc
               node src/secure.js decrypt db/crawler.db.enc db/crawler.db
@@ -62,14 +64,17 @@ jobs:
               git show origin/data:crawler.db > db/crawler.db
             fi
             ls -la db
-          else
-            echo "還沒有 data 分支，從空資料庫開始"
           fi
 
       - name: 抓取
         continue-on-error: true
         env:
           SITE: ${{ github.event.inputs.site }}
+          # 104 職缺通知信（沒設定就略過）
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
+          IMAP_MAILBOX: ${{ secrets.IMAP_MAILBOX }}
         run: |
           if [ "$SITE" = "beclass" ]; then
             echo "BeClass 由家裡電腦抓，這次只合併"
@@ -80,6 +85,8 @@ jobs:
           fi
 
       - name: 合併 BeClass（家裡電腦排程抓的，data-beclass 分支）
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: |
           if git fetch --depth=1 origin data-beclass; then
             git show origin/data-beclass:beclass.enc > db/beclass.enc
@@ -93,6 +100,9 @@ jobs:
         run: node --disable-warning=ExperimentalWarning src/backfill.js
 
       - name: 存回資料庫（data 分支只保留最新一份）
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+          PUSH_TOKEN: ${{ github.token }}
         run: |
           cd db
           rm -rf .git logs crawler.db-wal crawler.db-shm
@@ -105,14 +115,30 @@ jobs:
             git add crawler.db
           fi
           git -c user.name="crawler-bot" -c user.email="crawler-bot@users.noreply.github.com" commit -qm "data $(date '+%F %T')"
-          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
+          git push -f "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git" data
 
       - name: 匯出網頁
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+          # 網站清單只需要知道「有沒有設定信箱」，不給信箱密碼
+          MAIL104_CONFIGURED: ${{ secrets.IMAP_USER != '' && secrets.IMAP_PASSWORD != '' }}
         run: node --disable-warning=ExperimentalWarning src/export.js _site
 
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
+
+  # 發佈網頁：只有這個 job 有 Pages 權限，而且不跑任何專案程式或套件
+  deploy:
+    needs: crawl
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - id: deploy
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

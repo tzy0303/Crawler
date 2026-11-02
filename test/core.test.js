@@ -399,3 +399,10 @@ test('github replaceBranch：建立孤立 commit，分支不存在時改用新�
   assert.throws(() => githubClient({ repo: 'o/r/../x', token: 't' }), /GH_REPO/);
   assert.throws(() => githubClient({ repo: 'o/r' }), /GH_SYNC_TOKEN/);
 });
+
+test('mail104：MAIL104_CONFIGURED 只影響「已設定」顯示，不會沒有密碼也去登入信箱', () => {
+  const empty = fileURLToPath(new URL('./fixtures/', import.meta.url));
+  assert.equal(createMail104Adapter({}, { mailDir: empty }).configured, false);
+  assert.equal(createMail104Adapter({ MAIL104_CONFIGURED: 'true' }, { mailDir: empty }).configured, true);
+  assert.equal(createMail104Adapter({ MAIL104_CONFIGURED: 'false' }, { mailDir: empty }).configured, false);
+});

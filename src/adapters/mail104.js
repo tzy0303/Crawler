@@ -182,7 +182,8 @@ export function createMail104Adapter(env = process.env, { mailDir = env.MAIL_DIR
     name: '104 職缺通知信',
     baseUrl: 'https://www.104.com.tw',
     volatileFields: ['通知日期', '信件主旨'],
-    configured: imap || hasEml(mailDir),
+    // MAIL104_CONFIGURED=true：雲端匯出網頁時只需要知道「有設定信箱」，不必拿到信箱密碼
+    configured: imap || hasEml(mailDir) || env.MAIL104_CONFIGURED === 'true',
 
     /** 取代列表分頁：讀信（IMAP 和/或 mail 資料夾）→ 職缺（同一職缺出現在多封信時，以最新一封為準） */
     async collect({ isFirstRun, sinceDays = 3, initialDays = 30, log }) {
