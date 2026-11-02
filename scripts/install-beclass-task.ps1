@@ -8,7 +8,8 @@ $Node = (Get-Command node).Source
 $EnvFile = Join-Path $Root '.env'
 
 # 檢查 .env 有必要的設定（只檢查有沒有，不印出內容）
-$envText = if (Test-Path -LiteralPath $EnvFile) { Get-Content -LiteralPath $EnvFile -Raw } else { '' }
+# 一定要指定 UTF8：PowerShell 5.1 預設用 Big5 讀，中文註解會吃掉換行
+$envText = if (Test-Path -LiteralPath $EnvFile) { Get-Content -LiteralPath $EnvFile -Raw -Encoding UTF8 } else { '' }
 $missing = 'SITE_PASSWORD', 'GH_SYNC_TOKEN', 'GH_REPO' | Where-Object { $envText -notmatch "(?m)^\s*$_\s*=\s*\S" }
 if ($missing) { throw ".env 缺少：$($missing -join '、')（請看 README「BeClass（家裡電腦）」）" }
 
