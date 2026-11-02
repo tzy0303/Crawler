@@ -374,3 +374,28 @@ test('網站資料包（CRW2）：網站固定鹽推導金鑰，同密碼同鹽�
   // 金鑰不可匯出
   await assert.rejects(() => crypto.subtle.exportKey('raw', k1));
 });
+
+test('github replaceBranch：建立孤立 commit，分支不存在時改用新增', async () => {
+  const { githubClient } = await import('../src/core/github.js');
+  const calls = [];
+  const reply = (status, body = {}) => ({ ok: status < 300, status, json: async () => body });
+  const fetchImpl = async (url, opt) => {
+    calls.push([opt.method, url.replace('https://api.github.com/repos/o/r', ''), opt.body && JSON.parse(opt.body), opt.headers.Authorization]);
+    if (url.endsWith('/git/blobs')) return reply(201, { sha: 'b1' });
+    if (url.endsWith('/git/trees')) return reply(201, { sha: 't1' });
+    if (url.endsWith('/git/commits')) return reply(201, { sha: 'c1' });
+    if (opt.method === 'PATCH') return reply(422, { message: 'Reference does not exist' });
+    return reply(201);
+  };
+  const gh = githubClient({ repo: 'o/r', token: 'tok', fetchImpl });
+  assert.equal(await gh.replaceBranch('data-beclass', 'beclass.enc', new Uint8Array([1, 2]), 'm'), 'c1');
+  assert.deepEqual(calls.map((c) => `${c[0]} ${c[1]}`), [
+    'POST /git/blobs', 'POST /git/trees', 'POST /git/commits', 'PATCH /git/refs/heads/data-beclass', 'POST /git/refs',
+  ]);
+  assert.equal(calls[0][2].content, 'AQI=');
+  assert.deepEqual(calls[2][2].parents, []);
+  assert.deepEqual(calls[4][2], { ref: 'refs/heads/data-beclass', sha: 'c1' });
+  assert.ok(calls.every((c) => c[3] === 'Bearer tok'));
+  assert.throws(() => githubClient({ repo: 'o/r/../x', token: 't' }), /GH_REPO/);
+  assert.throws(() => githubClient({ repo: 'o/r' }), /GH_SYNC_TOKEN/);
+});

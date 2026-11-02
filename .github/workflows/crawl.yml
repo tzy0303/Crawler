@@ -3,14 +3,11 @@ name: 每日抓取
 
 on:
   schedule:
-    - cron: '30 4 * * *'   # UTC 04:30 = 台灣 12:30（BeClass 跑完也會自動接著執行；GitHub 排程可能延遲）
-  workflow_run:
-    workflows: ['BeClass（家裡電腦）']   # 家裡電腦抓完 BeClass 後，接著合併並發佈網站
-    types: [completed]
-  workflow_dispatch:
+    - cron: '30 4 * * *'   # UTC 04:30 = 台灣 12:30（GitHub 排程可能延遲）
+  workflow_dispatch:        # 家裡電腦推完 BeClass 後會用 site=beclass 呼叫（src/beclass-sync.js）
     inputs:
       site:
-        description: '只抓某個網站 id（空白 = 全部啟用的網站）'
+        description: '只抓某個網站 id（空白 = 全部啟用的網站；beclass = 只合併家裡電腦抓的資料）'
         required: false
         default: ''
   push:
@@ -74,13 +71,15 @@ jobs:
         env:
           SITE: ${{ github.event.inputs.site }}
         run: |
-          if [ -n "$SITE" ]; then
+          if [ "$SITE" = "beclass" ]; then
+            echo "BeClass 由家裡電腦抓，這次只合併"
+          elif [ -n "$SITE" ]; then
             node --disable-warning=ExperimentalWarning src/crawl.js --site "$SITE"
           else
             node --disable-warning=ExperimentalWarning src/crawl.js --skip beclass
           fi
 
-      - name: 合併 BeClass（家裡電腦抓的，data-beclass 分支）
+      - name: 合併 BeClass（家裡電腦排程抓的，data-beclass 分支）
         run: |
           if git fetch --depth=1 origin data-beclass; then
             git show origin/data-beclass:beclass.enc > db/beclass.enc

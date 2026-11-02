@@ -8,7 +8,7 @@ import { openDb } from './core/store.js';
 const { values } = parseArgs({
   options: {
     site: { type: 'string' },
-    skip: { type: 'string' }, // 雲端用：BeClass 由家裡電腦（self-hosted runner）抓
+    skip: { type: 'string' }, // 雲端用：BeClass 由家裡電腦排程抓（src/beclass-sync.js）
     pages: { type: 'string' },
     full: { type: 'boolean', default: false },
   },

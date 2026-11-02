@@ -189,8 +189,8 @@ const gh = {
     return result;
   },
   dispatch(site) {
-    // BeClass 封鎖雲端主機，由家裡電腦（self-hosted runner）抓，抓完會自動接著更新網站
-    if (site === 'beclass') return this.call('/actions/workflows/beclass.yml/dispatches', { method: 'POST', body: JSON.stringify({ ref: STATIC.branch }) });
+    // BeClass 封鎖雲端主機，由家裡電腦每天排程抓；GitHub 不能遠端叫家裡電腦執行程式（安全考量）
+    if (site === 'beclass') return Promise.reject(fail('BeClass 由家裡電腦每天 12:00 自動抓取，網頁無法立即觸發。要馬上更新，請在家裡電腦執行工作排程「網站更新爬蟲 BeClass 同步」。'));
     return this.call('/actions/workflows/crawl.yml/dispatches', { method: 'POST', body: JSON.stringify({ ref: STATIC.branch, inputs: { site: site || '' } }) });
   },
 };

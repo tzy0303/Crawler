@@ -71,6 +71,23 @@ npm test
 
 注意：public repo 如果連續 60 天沒有任何活動，GitHub 會自動停用排程。屆時到 Actions 頁面按一下重新啟用即可。
 
+## BeClass（家裡電腦）
+
+BeClass 封鎖雲端主機的 IP，所以由家裡電腦每天抓：Windows 工作排程在 12:00 執行 `src/beclass-sync.js`，抓完加密推到 `data-beclass` 分支，再通知雲端合併並發佈網站。12:00 沒開機的話，開機後會補跑；家裡電腦一直沒開時，雲端 12:30 的排程仍會照常發佈其他網站。
+
+**安全設計**：家裡電腦執行的是這個資料夾裡的程式，GitHub 無法遠端叫它執行任何東西（不使用 self-hosted runner）。所以 repo 就算被改，也不會影響家裡電腦。代價是程式更新後要自己 `git pull`，網頁上也不能「立即抓取」BeClass。
+
+一次性設定：
+
+1. GitHub 個人 **Settings → Developer settings → Fine-grained tokens** 建立一個**新的**權杖（不要和網頁用的共用）：只授權這個 repo，**Contents: Read and write**、**Actions: Read and write**，設定到期日（例如 1 年）。
+2. `.env` 填上 `SITE_PASSWORD`（和 GitHub Secrets 相同）、`GH_SYNC_TOKEN`、`GH_REPO`（見 `.env.example`）。
+3. 安裝排程（會自動沿用舊的 `D:\actions-runner-data\beclass.db`）：
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\install-beclass-task.ps1
+   Start-ScheduledTask -TaskName '網站更新爬蟲 BeClass 同步'   # 立刻試跑，日誌在 data\logs\
+   ```
+4. 移除：`scripts\uninstall-beclass-task.ps1`。
+
 ## 部署到其他雲端主機（Docker）
 
 專案也包好了 `Dockerfile`，可以部署到任何支援 Docker **和持久化磁碟**的平台（Zeabur、Railway、Fly.io…，大多要付費）。
@@ -123,6 +140,7 @@ src/core/        fetcher（速率限制/重試/編碼）、extract（欄位抽�
                  fields（動態欄位）、store（SQLite）、crawler
 src/crawl.js     CLI
 src/export.js    匯出雲端靜態網頁（GitHub Pages）
+src/beclass-sync.js  家裡電腦：抓 BeClass → 加密推到 data-beclass → 通知雲端合併
 src/shared/      查詢邏輯（伺服器與瀏覽器共用）
 src/server.js    API + 網頁 + 每日排程 + 登入
 src/scheduler.js 每日排程
