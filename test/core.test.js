@@ -359,3 +359,18 @@ test('只是多了欄位（∅ → 有值）不算更新', () => {
   assert.equal(db.prepare('SELECT COUNT(*) n FROM event_history').get().n, 0);
   assert.equal(upsertEvent(db, 's', { name: 'A', fields: { 地點: '高雄', 類型: '企業邀請' } }), 'updated');
 });
+
+test('網站資料包（CRW2）：網站固定鹽推導金鑰，同密碼同鹽可重複解密、錯密碼失敗', async () => {
+  const C = await import('../src/shared/crypto.js');
+  const data = new TextEncoder().encode('秘密資料');
+  const k1 = await C.deriveSiteKey('長密碼#2026', 'crawler-site:me/repo');
+  const enc = await C.encryptWithKey(data, k1);
+  assert.ok(C.isSiteEncrypted(enc));
+  // 重新推導（例如隔天網站更新後用記住的金鑰）也解得開
+  const k2 = await C.deriveSiteKey('長密碼#2026', 'crawler-site:me/repo');
+  assert.equal(new TextDecoder().decode(await C.decryptWithKey(enc, k2)), '秘密資料');
+  await assert.rejects(async () => C.decryptWithKey(enc, await C.deriveSiteKey('錯的', 'crawler-site:me/repo')), /密碼錯誤/);
+  await assert.rejects(async () => C.decryptWithKey(enc, await C.deriveSiteKey('長密碼#2026', 'crawler-site:other/repo')), /密碼錯誤/);
+  // 金鑰不可匯出
+  await assert.rejects(() => crypto.subtle.exportKey('raw', k1));
+});

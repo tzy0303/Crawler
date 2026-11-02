@@ -14,8 +14,12 @@ import { startDailyScheduler } from './scheduler.js';
 
 const db = openDb(config.dbFile);
 markStaleRuns(db);
-const STATIC_DIRS = { '/shared/': join(ROOT, 'src', 'shared'), '/': join(ROOT, 'public') };
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const STATIC_DIRS = {
+  '/shared/': join(ROOT, 'src', 'shared'),
+  '/vendor/': join(ROOT, 'node_modules', 'sql.js', 'dist'),
+  '/': join(ROOT, 'public'),
+};
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.wasm': 'application/wasm' };
 const sites = () => loadSites(config);
 const findSite = (id) => sites().find((s) => s.adapter.id === id);
 

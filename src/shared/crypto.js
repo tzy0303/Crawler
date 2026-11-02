@@ -42,6 +42,39 @@ export async function decryptBytes(bytes, password) {
   }
 }
 
+// ---- 網站資料包（CRW2）：用「網站固定鹽」推導金鑰 ----
+// 鹽每個網站固定（公開沒關係，作用是讓不同網站的同一密碼推出不同金鑰），
+// 所以瀏覽器可以只記住「不能匯出的金鑰」，不用存明文密碼，網站每天更新後也還能用。
+// 格式：'CRW2'(4) + iv(12) + ciphertext
+const MAGIC2 = [0x43, 0x52, 0x57, 0x32];
+
+/** 由密碼＋網站固定鹽推導 AES 金鑰（不可匯出：記住後也拿不回原始密碼或金鑰內容） */
+export async function deriveSiteKey(password, siteSalt) {
+  const salt = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(siteSalt))).slice(0, 16);
+  return deriveKey(password, salt);
+}
+
+export const isSiteEncrypted = (bytes) => bytes.length > 16 && MAGIC2.every((b, i) => bytes[i] === b);
+
+export async function encryptWithKey(bytes, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  const out = new Uint8Array(4 + 12 + ct.length);
+  out.set(MAGIC2, 0);
+  out.set(iv, 4);
+  out.set(ct, 16);
+  return out;
+}
+
+export async function decryptWithKey(bytes, key) {
+  if (!isSiteEncrypted(bytes)) throw new Error('不是網站資料包');
+  try {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(4, 16) }, key, bytes.slice(16)));
+  } catch {
+    throw new Error('密碼錯誤');
+  }
+}
+
 /** 網站資料包：網站清單（JSON）+ 資料庫，一起加密，登入時只要推導一次金鑰 */
 export function packBundle(json, dbBytes) {
   const head = new TextEncoder().encode(JSON.stringify(json));
