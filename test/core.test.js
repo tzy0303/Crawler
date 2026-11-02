@@ -147,7 +147,7 @@ test('104 通知信：解析職缺、公司、地區、薪資、經歷、學歷'
   const [a, b] = items;
   assert.equal(a.name, '行銷企劃專員｜好棒棒股份有限公司');
   assert.equal(a.url, 'https://www.104.com.tw/job/7abcd');
-  assert.equal(a.fields['地區'], '台北市大安區');
+  assert.equal(a.fields['工作地點'], '台北市大安區');
   assert.equal(a.fields['經歷'], '經歷不拘');
   assert.equal(a.fields['學歷'], '大學');
   assert.equal(a.fields['薪資'], '月薪 35,000~45,000元');
@@ -160,7 +160,7 @@ test('104 通知信：解析職缺、公司、地區、薪資、經歷、學歷'
 
 test('collect 型來源（通知信）：新增 → 同一職缺改薪資算修改，通知日期變動不算', async () => {
   const db = openDb(':memory:');
-  let batch = [{ name: '工程師｜A 公司', url: 'u', sourceId: '1', fields: { 薪資: '月薪 4萬', 地區: '新竹市', 通知日期: '2026-11-01' } }];
+  let batch = [{ name: '工程師｜A 公司', url: 'u', sourceId: '1', fields: { 薪資: '月薪 4萬', 工作地點: '新竹市', 通知日期: '2026-11-01' } }];
   const adapter = { id: 'mail104', name: 'm', baseUrl: 'x', volatileFields: ['通知日期'], collect: async () => batch };
   const r1 = await runCrawl(db, adapter, { log: () => {} });
   assert.equal(r1.newCount, 1);
@@ -268,9 +268,10 @@ test('地點統一：活動地點/地區/預設地點 → 地點；補上的地�
   const a = { 活動地點: '華山 東2館' };
   assert.deepEqual(addDerivedFields(a), ['地點']);
   assert.equal(a['地點'], '華山 東2館');
-  const b = { 地區: '台北市大安區' };
+  const b = { 工作地點: '台北市大安區' };
   addDerivedFields(b);
   assert.equal(b['地點'], '台北市大安區');
+  assert.equal(b['地區'], '臺北市大安區');
   assert.equal(b['縣市'], '臺北市');
   const c = { 日期: '2026-11-01' };
   addDerivedFields(c, { defaultLocation: '華山1914（臺北市中正區）' });
@@ -285,4 +286,21 @@ test('地點統一：活動地點/地區/預設地點 → 地點；補上的地�
   const r = await runCrawl(db, ad, { log: () => {} });
   assert.equal(r.updatedCount, 0);
   assert.equal(JSON.parse(db.prepare('SELECT fields_json FROM events').get().fields_json)['地點'], '東2館');
+});
+
+test('地區：只取縣市＋鄉鎮市區兩層', async () => {
+  const { deriveArea, addDerivedFields } = await import('../src/core/extract.js');
+  assert.equal(deriveArea('845台灣高雄市內門區內豊里內埔82號'), '高雄市內門區');
+  assert.equal(deriveArea('桃園市桃園區中正路100號'), '桃園市桃園區');
+  assert.equal(deriveArea('台東縣台東市中華路一段'), '臺東縣臺東市');
+  assert.equal(deriveArea('桃園市平鎮區中豐路'), '桃園市平鎮區');
+  assert.equal(deriveArea('高雄市前鎮區成功二路'), '高雄市前鎮區');
+  assert.equal(deriveArea('5F FORUM（台灣台北市中山區南京西路14號）'), '臺北市中山區');
+  assert.equal(deriveArea('臺北市大安森林公園'), '臺北市');
+  assert.equal(deriveArea('Google Meet 線上'), '線上');
+  // 沒有地點欄位時，從活動說明找地址
+  const f = { 日期: '2026-11-01' };
+  addDerivedFields(f, { text: '時間：下午兩點\n地點：宜蘭縣羅東鎮中正北路' });
+  assert.equal(f['地區'], '宜蘭縣羅東鎮');
+  assert.equal(f['縣市'], '宜蘭縣');
 });

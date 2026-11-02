@@ -329,7 +329,8 @@ async function loadEvents() {
   const f = buildFilters();
   if (Object.keys(f).length) p.set('filters', JSON.stringify(f));
   const data = await api(`/api/events?${p}`);
-  const cols = fields.filter((f) => f.type !== 'number').slice(0, SHOW_COLS).map((f) => f.key);
+  const keys = fields.filter((f) => f.type !== 'number').map((f) => f.key);
+  const cols = [...keys.filter((k) => k === '地區'), ...keys.filter((k) => !['地區', '縣市', '地點'].includes(k))].slice(0, SHOW_COLS);
   const th = (key, label) => `<th data-sort="${key}">${label}${state.sort === key ? (state.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
   $('tbl').innerHTML = `<tr>${th('name', '名稱')}${cols.map((c) => `<th>${esc(c)}</th>`).join('')}${th('created', '新增時間')}${th('updated', '修改時間')}</tr>` +
     data.rows.map((r) => {

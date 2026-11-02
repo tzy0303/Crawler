@@ -90,6 +90,9 @@ jobs:
             echo "還沒有 data-beclass 分支（家裡電腦還沒抓過），略過"
           fi
 
+      - name: 補齊地點/地區
+        run: node --disable-warning=ExperimentalWarning src/backfill.js
+
       - name: 存回資料庫（data 分支只保留最新一份）
         run: |
           cd db

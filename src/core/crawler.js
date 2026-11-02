@@ -28,7 +28,7 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
   const itemLog = ON_CI ? () => {} : log;
   const record = (item, extra = {}, partial = false) => {
     const fields = { ...item.fields, ...extra.fields };
-    const derived = addDerivedFields(fields, { defaultLocation: adapter.defaultLocation });
+    const derived = addDerivedFields(fields, { defaultLocation: adapter.defaultLocation, text: extra.description });
     const result = upsertEvent(db, adapter.id,
       { name: item.name, url: item.url, sourceId: item.sourceId, fields, description: extra.description },
       { runId, volatile: [...volatile, ...derived], partial });

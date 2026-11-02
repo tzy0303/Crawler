@@ -66,20 +66,46 @@ export function deriveCity(text) {
   return null;
 }
 
-/** 衍生欄位由其他欄位推出，不另外算「修改」 */
-export const DERIVED_FIELDS = ['縣市'];
-/** 每個網站都要有、也一定列入篩選的欄位 */
-export const CORE_FIELDS = ['地點', '縣市'];
+const DISTRICT_RE = /^([^\s\d,，、。()（）[\]【】|｜/]{1,4}?[區鄉鎮市])/;
 
-const LOCATION_KEY = /地點|場地|會場|地區|工作地|上課地|集合/;
+/**
+ * 地區：縣市＋鄉鎮市區兩層，例如「桃園市桃園區」「臺東縣臺東市」；
+ * 找不到鄉鎮市區時只回縣市，線上活動回「線上」
+ */
+export function deriveArea(text) {
+  if (!text) return null;
+  const t = String(text).replace(/台/g, '臺');
+  let city = null;
+  let idx = Infinity;
+  for (const c of CITIES) {
+    const i = t.indexOf(c);
+    if (i >= 0 && i < idx) [city, idx] = [c, i];
+  }
+  if (!city) return deriveCity(text);
+  const rest = t.slice(idx + city.length);
+  const m = rest.match(DISTRICT_RE);
+  if (!m || m[1].length < 2 || /[路街段號巷弄樓]/.test(m[1])) return city;
+  let district = m[1];
+  // 前鎮區、平鎮區、新市區：名字裡的「鎮/市」不是結尾，往後多吃一個「區/鄉」
+  if (/[區鄉]/.test(rest[district.length] ?? '') && /[鎮市]$/.test(district)) district += rest[district.length];
+  return city + district;
+}
+
+/** 衍生欄位由其他欄位推出，不另外算「修改」 */
+export const DERIVED_FIELDS = ['縣市', '地區'];
+/** 每個網站都要有、也一定列入篩選的欄位 */
+export const CORE_FIELDS = ['地區', '地點', '縣市'];
+
+const LOCATION_KEY = /地點|場地|會場|工作地|上課地|集合/;
 
 /**
  * 加上衍生欄位：
- *  地點：網站欄位名稱不一（活動地點、場地、地區…）時統一補一個「地點」；都沒有時用網站的預設地點
- *  縣市：從地點/地址推出，依序試到推得出來為止
+ *  地點：網站欄位名稱不一（活動地點、場地、工作地點…）時統一補一個「地點」；都沒有時用網站的預設地點
+ *  地區：縣市＋鄉鎮市區（從地點、地址找；都沒有時從活動說明 text 裡找）
+ *  縣市：從地區取前段
  * @returns 這次補上的欄位名稱（由其他欄位推出，不算「修改」）
  */
-export function addDerivedFields(fields, { defaultLocation } = {}) {
+export function addDerivedFields(fields, { defaultLocation, text } = {}) {
   const derived = [];
   const keys = Object.keys(fields);
   if (!fields['地點']) {
@@ -90,16 +116,21 @@ export function addDerivedFields(fields, { defaultLocation } = {}) {
       derived.push('地點');
     }
   }
-  if (!('縣市' in fields)) {
-    const locKeys = ['地點', ...keys.filter((k) => LOCATION_KEY.test(k)), ...keys.filter((k) => /地址/.test(k))];
-    for (const k of locKeys) {
-      const city = deriveCity(fields[k]);
-      if (city) {
-        fields['縣市'] = city;
-        derived.push('縣市');
-        break;
-      }
+  if (!fields['地區']) {
+    const sources = ['地點', ...keys.filter((k) => LOCATION_KEY.test(k)), ...keys.filter((k) => /地址/.test(k))]
+      .map((k) => fields[k])
+      .concat(text ? [text] : []);
+    // 優先找到兩層（縣市＋鄉鎮市區）的；都只有縣市時用第一個
+    const areas = sources.map(deriveArea).filter(Boolean);
+    const area = areas.find((a) => a.length > 3) ?? areas[0];
+    if (area) {
+      fields['地區'] = area;
+      derived.push('地區');
     }
+  }
+  if (!('縣市' in fields) && fields['地區']) {
+    fields['縣市'] = fields['地區'] === '線上' ? '線上' : deriveCity(fields['地區']);
+    derived.push('縣市');
   }
   return derived;
 }

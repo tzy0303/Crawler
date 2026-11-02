@@ -84,7 +84,7 @@ export function parseJobMail(html, { date = null, subject = '' } = {}) {
       if (!fields['薪資'] && SALARY_RE.test(t)) fields['薪資'] = t;
       else if (!fields['經歷'] && EXP_RE.test(t) && t.length <= 20) fields['經歷'] = t;
       else if (!fields['學歷'] && EDU_RE.test(t) && t.length <= 20) fields['學歷'] = t;
-      else if (!fields['地區'] && t.length <= 30 && deriveCity(t) && deriveCity(t) !== '線上') fields['地區'] = t;
+      else if (!fields['工作地點'] && t.length <= 30 && deriveCity(t) && deriveCity(t) !== '線上') fields['工作地點'] = t;
       else if (!fields['公司'] && COMPANY_RE.test(t) && t.length <= 40) fields['公司'] = t;
     }
     if (mailDate) fields['通知日期'] = mailDate;

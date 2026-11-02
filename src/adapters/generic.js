@@ -171,6 +171,33 @@ function extractFields(lines) {
   return fields;
 }
 
+/** schema.org Event（JSON-LD）：地點、日期 */
+function jsonLdFields($) {
+  const out = {};
+  $('script[type="application/ld+json"]').each((_, el) => {
+    let data;
+    try {
+      data = JSON.parse($(el).text());
+    } catch {
+      return;
+    }
+    const nodes = [].concat(data).flatMap((d) => [].concat(d?.['@graph'] ?? d));
+    const ev = nodes.find((n) => /Event$/.test([].concat(n?.['@type'] ?? '').join(' ')));
+    if (!ev || out['地點']) return;
+    const loc = [].concat(ev.location ?? [])[0];
+    if (loc) {
+      const a = loc.address;
+      const addr = typeof a === 'string' ? a
+        : a ? [a.addressRegion, a.addressLocality, a.streetAddress].filter(Boolean).join('') : '';
+      const parts = [loc.name, addr].filter((x, i, arr) => x && arr.indexOf(x) === i);
+      if (parts.length) out['地點'] = parts.length > 1 ? `${parts[0]}（${parts[1]}）` : parts[0];
+    }
+    if (ev.startDate) out['日期'] = String(ev.startDate).slice(0, 10);
+    if (ev.endDate) out['結束日期'] = String(ev.endDate).slice(0, 10);
+  });
+  return out;
+}
+
 function guessMain($) {
   for (const sel of ['main', 'article', '[role=main]', '#content', '.content', '#main', '.main']) {
     const el = $(sel).first();
@@ -232,7 +259,8 @@ export function createGenericAdapter(cfg) {
             const $ = cheerio.load(html);
             const main = cfg.contentSelector ? $(cfg.contentSelector).first() : guessMain($);
             const lines = toLines($, main.length ? main : $('body'));
-            const fields = extractFields(lines);
+            // JSON-LD 的資料比較準，優先使用；頁面上「標籤：值」補其他欄位
+            const fields = { ...extractFields(lines), ...jsonLdFields($) };
             const name = cfg.titleSelector ? $(cfg.titleSelector).first().text().trim() : null;
             return { name, fields, description: cfg.trackDescription ? lines.join('\n').slice(0, 20000) : null };
           },

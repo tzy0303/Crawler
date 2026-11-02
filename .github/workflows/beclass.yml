@@ -34,6 +34,9 @@ jobs:
       - name: 抓 BeClass
         run: node --disable-warning=ExperimentalWarning src/crawl.js --site beclass
 
+      - name: 補齊地點/地區
+        run: node --disable-warning=ExperimentalWarning src/backfill.js
+
       - name: 上傳 BeClass 資料（data-beclass 分支只保留最新一份）
         run: |
           out="$RUNNER_TEMP/beclass-upload"
