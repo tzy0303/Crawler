@@ -240,11 +240,16 @@ export function createGenericAdapter(cfg) {
         }
         if (!paged && cfg.autoPaging !== false) detectedTemplate = analysis.pageTemplate;
       }
-      const seen = new Set();
-      const items = [];
+      // 同一篇常有好幾個連結（標題、按讚、留言數…）：在標題元素裡的優先，其次取文字最長的
+      const best = new Map();
+      const score = (a) => ($(a.el).closest('h1,h2,h3,h4,h5,h6,[class*=title]').length ? 1000 : 0) + a.text.length;
       for (const a of collectAnchors($, pageUrl)) {
-        if (seen.has(a.url) || (linkRe && !linkRe.test(canonical(a.url)))) continue;
-        seen.add(a.url);
+        if (linkRe && !linkRe.test(canonical(a.url))) continue;
+        const cur = best.get(a.url);
+        if (!cur || score(a) > score(cur)) best.set(a.url, a);
+      }
+      const items = [];
+      for (const a of best.values()) {
         const box = $(a.el).closest('li,tr,article,.item,.card,.list-item');
         const fields = box.length ? extractFields(toLines($, box).filter((l) => l !== a.text)) : {};
         items.push({ name: a.text, url: a.url, sourceId: null, fields });
