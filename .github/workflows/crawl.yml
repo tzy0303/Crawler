@@ -47,6 +47,10 @@ jobs:
         env:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: |
+          # 沒有網站密碼就整個停下來：public repo 不能放未加密的資料
+          if [ -z "$(echo "$SITE_PASSWORD" | tr -d '[:space:]')" ]; then
+            echo "::error::沒有設定 SITE_PASSWORD（Settings → Secrets → Actions），停止，不發佈未加密資料"; exit 1
+          fi
           mkdir -p db
           # 分辨「分支不存在」和「讀取失敗」：讀取失敗就停，不能從空資料庫開始再覆蓋掉舊資料
           set +e; git ls-remote --exit-code --heads origin data > /dev/null; rc=$?; set -e
@@ -107,13 +111,9 @@ jobs:
           cd db
           rm -rf .git logs crawler.db-wal crawler.db-shm
           git init -q -b data
-          if [ -n "$SITE_PASSWORD" ]; then
-            # 有網站密碼：data 分支只放加密檔（public repo 也看不到內容）
-            node ../src/secure.js encrypt crawler.db crawler.db.enc
-            git add crawler.db.enc
-          else
-            git add crawler.db
-          fi
+          # data 分支只放加密檔（public repo 也看不到內容）；secure.js 沒有密碼會失敗
+          node ../src/secure.js encrypt crawler.db crawler.db.enc
+          git add crawler.db.enc
           git -c user.name="crawler-bot" -c user.email="crawler-bot@users.noreply.github.com" commit -qm "data $(date '+%F %T')"
           git push -f "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git" data
 

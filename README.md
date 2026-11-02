@@ -62,7 +62,7 @@ npm test
 3. repo **Settings → Pages → Source 選「GitHub Actions」**。
 4. 到 GitHub 個人 **Settings → Developer settings → Fine-grained tokens** 建立權杖：只授權這個 repo，權限 **Contents: Read and write**、**Actions: Read and write**。第一次在網頁修改網站時貼上，權杖只存在你的瀏覽器裡。
 
-**網站密碼（建議設定）**：在 repo **Settings → Secrets and variables → Actions** 新增 `SITE_PASSWORD`，之後雲端每次執行都會：
+**網站密碼（必須設定）**：在 repo **Settings → Secrets and variables → Actions** 新增 `SITE_PASSWORD`。沒有設定時雲端會直接停止、不發佈，避免資料在 public repo 公開（真的要公開才在 workflow 設 `ALLOW_PUBLIC_DATA=true`）。設定後雲端每次執行都會：
 - 把網頁資料加密成 `data.enc`（AES-256-GCM，金鑰由密碼經 PBKDF2 推導），打開網頁要先輸入密碼，在瀏覽器裡解密。
 - `data` 分支也只存加密後的 `crawler.db.enc`，public repo 裡看不到內容。
 - 執行紀錄（公開）只記數量，不印出活動和職缺名稱。

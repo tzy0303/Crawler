@@ -12,6 +12,14 @@ import { now, openDb } from './core/store.js';
 import { deriveSiteKey, encryptWithKey, packBundle } from './shared/crypto.js';
 import { siteStats } from './shared/query.js';
 
+// Secrets 貼上時常多帶空白或換行；網頁登入時打的密碼不會有
+const password = process.env.SITE_PASSWORD?.trim();
+// 雲端（GitHub Actions）一定要加密：Secret 被誤刪時寧可停下來，也不把資料公開
+if (!password && process.env.GITHUB_ACTIONS === 'true' && process.env.ALLOW_PUBLIC_DATA !== 'true') {
+  console.error('沒有 SITE_PASSWORD，停止匯出（不發佈未加密資料）。真的要公開資料才設 ALLOW_PUBLIC_DATA=true');
+  process.exit(1);
+}
+
 const out = resolve(process.argv[2] ?? '_site');
 removeDir(out);
 mkdirSync(join(out, 'shared'), { recursive: true });
@@ -48,8 +56,6 @@ const info = {
   sites,
 };
 
-// Secrets 貼上時常多帶空白或換行；網頁登入時打的密碼不會有
-const password = process.env.SITE_PASSWORD?.trim();
 if (password) {
   // 先壓縮再加密（資料庫多為文字，約省 2/3，網頁開啟快很多）
   const bundle = gzipSync(packBundle(info, new Uint8Array(readFileSync(dbOut))), { level: 9 });
