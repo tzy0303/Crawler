@@ -67,6 +67,8 @@ npm test
 - `data` 分支也只存加密後的 `crawler.db.enc`，public repo 裡看不到內容。
 - 執行紀錄（公開）只記數量，不印出活動和職缺名稱。
 
+**注意：這個 GitHub 帳號不要再開其他 GitHub Pages 網站。** 同一帳號的所有 Pages 網站共用 `帳號.github.io` 這個網域，瀏覽器會讓它們共用儲存空間，其他網站的程式就能拿到這裡記住的登入金鑰和 GitHub 權杖。真的要開，請先替這個專案設定自訂網域（repo **Settings → Pages → Custom domain**），或改用另一個 GitHub 帳號。
+
 這是一組共用密碼，不是個人帳號。加密檔可以公開下載，所以密碼請設 12 個字以上。登入時可以勾選「記住這台裝置」，按右上角「登出」可以清除。
 
 注意：public repo 如果連續 60 天沒有任何活動，GitHub 會自動停用排程。屆時到 Actions 頁面按一下重新啟用即可。
