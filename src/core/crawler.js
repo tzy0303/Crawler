@@ -45,7 +45,7 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
 
   try {
     if (adapter.collect) {
-      const items = await adapter.collect({ isFirstRun, log, ...sourceOpts });
+      const items = await adapter.collect({ isFirstRun, log, maxPages, initialPages, ...sourceOpts });
       stats.pages = 1;
       for (const item of items) {
         const key = normalizeName(item.name);

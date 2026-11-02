@@ -304,3 +304,29 @@ test('地區：只取縣市＋鄉鎮市區兩層', async () => {
   assert.equal(f['地區'], '宜蘭縣羅東鎮');
   assert.equal(f['縣市'], '宜蘭縣');
 });
+
+test('IT 邦幫忙：同主題同作者合成一筆，最新一篇換了才算更新', async () => {
+  const { groupByTopic, parseArticle } = await import('../src/adapters/ithelp.js');
+  const html = `<div class="qa-header"><h2 class="qa-header__title"> Day 30｜完整展示 </h2>
+    <a href="https://ithelp.ithome.com.tw/tags/articles/%E9%9B%BB%E5%BD%B1" class="tag qa-header__tagList">電影收藏</a>
+    <a class="qa-header__info-person">ppp</a><a title="2026-11-01 21:47:56" class="qa-header__info-time">x</a></div>`;
+  const a = parseArticle(html, 'https://ithelp.ithome.com.tw/articles/3');
+  assert.equal(a.topic, '電影收藏');
+  assert.equal(a.time, '2026-11-01 21:47:56');
+  const arts = [a, { ...a, url: 'u2', title: 'Day 29｜測試', time: '2026-10-31 20:00:00' }, { ...a, author: '別人', title: 'Python 入門', time: '2026-11-01' }];
+  const items = groupByTopic(arts);
+  assert.equal(items.length, 2);
+  const g = items.find((i) => i.name === '電影收藏（ppp）');
+  assert.equal(g.fields['進度'], 'Day 30');
+  assert.equal(g.fields['本次看到篇數'], 2);
+  assert.match(g.url, /tags\/articles/);
+
+  const db = openDb(':memory:');
+  let batch = [g];
+  const ad = { id: 'ithelp', name: 'i', baseUrl: 'x', volatileFields: ['本次看到篇數'], collect: async () => batch };
+  await runCrawl(db, ad, { log: () => {} });
+  batch = [{ ...g, fields: { ...g.fields, 本次看到篇數: 1 } }];
+  assert.equal((await runCrawl(db, ad, { log: () => {} })).updatedCount, 0);
+  batch = [{ ...g, fields: { ...g.fields, 最新一篇: 'Day 31｜新文章', 進度: 'Day 31' } }];
+  assert.equal((await runCrawl(db, ad, { log: () => {} })).updatedCount, 1);
+});

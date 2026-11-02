@@ -12,6 +12,11 @@
       "enabled": true,
       "sinceDays": 3,
       "initialDays": 30
+    },
+    "ithelp": {
+      "enabled": true,
+      "maxPages": 2,
+      "initialPages": 2
     }
   }
 }

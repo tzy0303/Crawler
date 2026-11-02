@@ -1,4 +1,5 @@
 import beclass from './beclass.js';
+import ithelp from './ithelp.js';
 import { createGenericAdapter } from './generic.js';
 import { createMail104Adapter } from './mail104.js';
 import { readSitesFile } from '../core/sites-file.js';
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** 內建（寫程式的）來源；設定在 config.json 的 sites */
-export const builtinAdapters = { [beclass.id]: beclass };
+export const builtinAdapters = { [beclass.id]: beclass, [ithelp.id]: ithelp };
 const builtinFactories = { mail104: () => createMail104Adapter(process.env, { mailDir: join(ROOT_DIR, process.env.MAIL_DIR || 'mail') }) };
 
 /**

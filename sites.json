@@ -22,18 +22,5 @@
     "volatileFields": [],
     "maxPages": 5,
     "encoding": "auto"
-  },
-  {
-    "id": "ithelp-tech",
-    "name": "IT 邦幫忙 技術文章",
-    "enabled": true,
-    "listUrl": "https://ithelp.ithome.com.tw/articles?tab=tech&page={page}",
-    "linkPattern": "ithelp.ithome.com.tw/articles/*",
-    "fetchDetail": true,
-    "trackDescription": false,
-    "volatileFields": [],
-    "maxPages": 2,
-    "initialPages": 2,
-    "encoding": "auto"
   }
 ]
