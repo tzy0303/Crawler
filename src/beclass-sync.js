@@ -42,6 +42,7 @@ try {
   if (!run('fragment.js', 'export', 'beclass', out)) throw new Error('匯出失敗');
   const sha = await gh.replaceBranch('data-beclass', 'beclass.enc', readFileSync(out), `beclass ${now()}`);
   log(`[BeClass 同步] 已推送 data-beclass（${sha.slice(0, 7)}）`);
+  if (await gh.ensureWorkflowEnabled('crawl.yml')) log('[BeClass 同步] 雲端每日抓取被 GitHub 停用了，已重新啟用');
   // site=beclass：雲端只合併 BeClass 並發佈，不重抓其他網站
   await gh.dispatch('crawl.yml', env.GH_BRANCH || 'main', { site: 'beclass' });
   log('[BeClass 同步] 已通知雲端合併發佈');

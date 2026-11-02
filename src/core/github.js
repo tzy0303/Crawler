@@ -40,6 +40,13 @@ export function githubClient({ repo, token, fetchImpl = fetch }) {
       }
       return commit.sha;
     },
+    /** public repo 60 天沒動靜，GitHub 會自動停用排程；停用了就重新啟用，回傳是否有重新啟用 */
+    async ensureWorkflowEnabled(workflow) {
+      const { state } = await call('GET', `/actions/workflows/${workflow}`);
+      if (state === 'active') return false;
+      await call('PUT', `/actions/workflows/${workflow}/enable`);
+      return true;
+    },
     dispatch(workflow, ref, inputs = {}) {
       return call('POST', `/actions/workflows/${workflow}/dispatches`, { ref, inputs });
     },

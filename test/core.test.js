@@ -406,3 +406,17 @@ test('mail104：MAIL104_CONFIGURED 只影響「已設定」顯示，不會沒有
   assert.equal(createMail104Adapter({ MAIL104_CONFIGURED: 'true' }, { mailDir: empty }).configured, true);
   assert.equal(createMail104Adapter({ MAIL104_CONFIGURED: 'false' }, { mailDir: empty }).configured, false);
 });
+
+test('github ensureWorkflowEnabled：被停用才重新啟用', async () => {
+  const { githubClient } = await import('../src/core/github.js');
+  for (const [state, expected] of [['active', ['GET']], ['disabled_inactivity', ['GET', 'PUT']]]) {
+    const methods = [];
+    const fetchImpl = async (url, opt) => {
+      methods.push(opt.method);
+      return { ok: true, status: opt.method === 'PUT' ? 204 : 200, json: async () => ({ state }) };
+    };
+    const enabled = await githubClient({ repo: 'o/r', token: 't', fetchImpl }).ensureWorkflowEnabled('crawl.yml');
+    assert.equal(enabled, state !== 'active');
+    assert.deepEqual(methods, expected);
+  }
+});
