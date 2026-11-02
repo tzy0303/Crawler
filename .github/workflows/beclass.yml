@@ -5,7 +5,7 @@ name: BeClass（家裡電腦）
 
 on:
   schedule:
-    - cron: '40 21 * * *'   # UTC 21:40 = 台灣 05:40
+    - cron: '0 4 * * *'   # UTC 04:00 = 台灣 12:00
   workflow_dispatch:
 
 permissions:

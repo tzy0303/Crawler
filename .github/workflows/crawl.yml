@@ -3,7 +3,7 @@ name: 每日抓取
 
 on:
   schedule:
-    - cron: '0 22 * * *'   # UTC 22:00 = 台灣 06:00（GitHub 排程可能延遲幾分鐘到一小時）
+    - cron: '30 4 * * *'   # UTC 04:30 = 台灣 12:30（BeClass 跑完也會自動接著執行；GitHub 排程可能延遲）
   workflow_run:
     workflows: ['BeClass（家裡電腦）']   # 家裡電腦抓完 BeClass 後，接著合併並發佈網站
     types: [completed]

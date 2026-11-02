@@ -1,6 +1,6 @@
 {
   "port": 5190,
-  "crawlTime": "06:00",
+  "crawlTime": "12:00",
   "dbFile": "data/crawler.db",
   "sites": {
     "beclass": {
