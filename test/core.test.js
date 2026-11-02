@@ -330,3 +330,32 @@ test('IT 邦幫忙：同主題同作者合成一筆，最新一篇換了才算�
   batch = [{ ...g, fields: { ...g.fields, 最新一篇: 'Day 31｜新文章', 進度: 'Day 31' } }];
   assert.equal((await runCrawl(db, ad, { log: () => {} })).updatedCount, 1);
 });
+
+test('104 企業邀請信：標籤一行、值一行的固定欄位；沒寫地點不亂猜', () => {
+  const html = `<table><tr><td><a href="https://www.104.com.tw/company/abc">某某科技有限公司</a></td></tr>
+    <tr><td><a href="https://www.104.com.tw/job/xyz9?jobsource=vip">後端工程師</a></td></tr>
+    <tr><td>工作介紹</td></tr><tr><td>我們在臺北城深耕多年，歡迎加入</td></tr>
+    <tr><td>職務類別</td></tr><tr><td>軟體工程師、後端工程師</td></tr>
+    <tr><td>工作待遇</td></tr><tr><td>月薪 50,000~70,000元</td></tr>
+    <tr><td>上班地點</td></tr><tr><td>新北市板橋區文化路一段</td></tr>
+    <tr><td>休假制度</td></tr><tr><td>週休二日</td></tr></table>`;
+  const [job] = parseJobMail(html, { subject: '【某某科技有限公司】發給您的【詢問意願】' });
+  assert.equal(job.name, '後端工程師｜某某科技有限公司');
+  assert.equal(job.fields['職務類別'], '軟體工程師、後端工程師');
+  assert.equal(job.fields['薪資'], '月薪 50,000~70,000元');
+  assert.equal(job.fields['工作地點'], '新北市板橋區文化路一段');
+  assert.equal(job.fields['休假制度'], '週休二日');
+  assert.equal(job.fields['類型'], '企業邀請');
+
+  const noPlace = html.replace(/<tr><td>上班地點.*?文化路一段<\/td><\/tr>/, '');
+  assert.equal(parseJobMail(noPlace, {})[0].fields['工作地點'], undefined);
+});
+
+test('只是多了欄位（∅ → 有值）不算更新', () => {
+  const db = openDb(':memory:');
+  upsertEvent(db, 's', { name: 'A', fields: { 地點: '台北' } });
+  assert.equal(upsertEvent(db, 's', { name: 'A', fields: { 地點: '台北', 類型: '企業邀請' } }), 'same');
+  assert.equal(JSON.parse(db.prepare('SELECT fields_json FROM events').get().fields_json)['類型'], '企業邀請');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM event_history').get().n, 0);
+  assert.equal(upsertEvent(db, 's', { name: 'A', fields: { 地點: '高雄', 類型: '企業邀請' } }), 'updated');
+});

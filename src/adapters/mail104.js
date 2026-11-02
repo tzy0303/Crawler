@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { deriveCity, labelValues, toLines } from '../core/extract.js';
+import { toLines } from '../core/extract.js';
 
 /**
  * 104 職缺通知信：不爬 104 網站，只讀使用者信箱裡 104 寄來的「職缺通知」信，
@@ -22,7 +22,16 @@ const EXP_RE = /經歷|工作經驗|年以上|經驗不拘/;
 const EDU_RE = /學歷|大學|專科|高中|碩士|博士|國中/;
 const COMPANY_RE = /公司|企業|集團|銀行|醫院|學校|協會|基金會|事務所|工作室|診所|商行|股份|有限/;
 
-const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+const clean = (s) => String(s ?? '').replace(/[\s͏‌]+/g, ' ').trim();
+
+/** 104 信裡的固定欄位 → 我們的欄位名稱 */
+const STRUCTURED = {
+  職務類別: '職務類別', 工作待遇: '薪資', 工作性質: '工作性質', 上班地點: '工作地點',
+  管理責任: '管理責任', 出差外派: '出差外派', 上班時段: '上班時段', 休假制度: '休假制度',
+  可上班日: '可上班日', 需求人數: '需求人數', 工作經歷: '經歷', 學歷要求: '學歷', 科系要求: '科系',
+};
+/** 像地址的短字串：開頭就是縣市＋鄉鎮市區，例如「台北市中正區」 */
+const LOOKS_LIKE_PLACE = /^(臺北|新北|桃園|臺中|臺南|高雄|基隆|新竹|嘉義|苗栗|彰化|南投|雲林|屏東|宜蘭|花蓮|臺東|澎湖|金門|連江)[市縣][^\s]{1,4}[區鄉鎮市]/;
 
 function hrefJobId(href, re = JOB_RE) {
   let h = String(href ?? '');
@@ -75,18 +84,26 @@ export function parseJobMail(html, { date = null, subject = '' } = {}) {
     const companyA = box.find('a[href]').filter((_, x) => !!hrefJobId($(x).attr('href'), COMPANY_LINK_RE)).first();
     if (companyA.length && clean(companyA.text())) fields['公司'] = clean(companyA.text());
 
-    const tokens = toLines($, box)
-      .flatMap((l) => l.split(/\s*[|｜•·]\s*/))
-      .map(clean)
-      .filter((t) => t && t !== title && !BUTTON_RE.test(t));
-    Object.assign(fields, labelValues(tokens));
+    const lines = toLines($, box).map(clean).filter(Boolean);
+    // 104 固定欄位：「標籤」一行、「值」一行（或「標籤：值」）
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^([^：:]{2,6})\s*[：:]?\s*(.*)$/);
+      const key = m && STRUCTURED[m[1]];
+      if (!key || fields[key]) continue;
+      const value = m[2] || lines[i + 1] || '';
+      if (value && !STRUCTURED[value]) fields[key] = value.slice(0, 100);
+    }
+    // 摘要式通知（一行裡有「台北市大安區 | 經歷不拘 | 大學」）：只收短、明確的片段，沒寫就留空不亂猜
+    const tokens = lines.flatMap((l) => l.split(/\s*[|｜•·]\s*/)).map(clean)
+      .filter((t) => t && t !== title && t.length <= 25 && !BUTTON_RE.test(t));
     for (const t of tokens) {
       if (!fields['薪資'] && SALARY_RE.test(t)) fields['薪資'] = t;
-      else if (!fields['經歷'] && EXP_RE.test(t) && t.length <= 20) fields['經歷'] = t;
-      else if (!fields['學歷'] && EDU_RE.test(t) && t.length <= 20) fields['學歷'] = t;
-      else if (!fields['工作地點'] && t.length <= 30 && deriveCity(t) && deriveCity(t) !== '線上') fields['工作地點'] = t;
-      else if (!fields['公司'] && COMPANY_RE.test(t) && t.length <= 40) fields['公司'] = t;
+      else if (!fields['經歷'] && EXP_RE.test(t) && !/[：:]$/.test(t)) fields['經歷'] = t;
+      else if (!fields['學歷'] && EDU_RE.test(t) && !/[：:]$/.test(t)) fields['學歷'] = t;
+      else if (!fields['工作地點'] && LOOKS_LIKE_PLACE.test(t.replace(/台/g, '臺'))) fields['工作地點'] = t;
+      else if (!fields['公司'] && COMPANY_RE.test(t)) fields['公司'] = t;
     }
+    fields['類型'] = /詢問意願|邀請|面試/.test(subject) ? '企業邀請' : '職缺通知';
     if (mailDate) fields['通知日期'] = mailDate;
     if (subject) fields['信件主旨'] = clean(subject);
 

@@ -67,6 +67,12 @@ export function upsertEvent(db, siteId, ev, { runId = null, volatile = [], parti
   if ((existing.description ?? '') !== (ev.description ?? '')) {
     changes['活動說明'] = { from: existing.description ?? null, to: ev.description ?? null };
   }
+  // 只是多了欄位（∅ → 有值，通常是抓取程式改版多抓到東西）：靜默補上，不算更新
+  if (Object.values(changes).every((c) => c.from === null)) {
+    db.prepare('UPDATE events SET fields_json = ?, description = ?, content_hash = ?, url = ?, source_id = ?, last_seen_at = ? WHERE id = ?')
+      .run(fieldsJson, ev.description ?? null, hash, ev.url ?? null, ev.sourceId ?? null, ts, existing.id);
+    return 'same';
+  }
   db.prepare(
     `UPDATE events SET name = ?, fields_json = ?, description = ?, content_hash = ?, url = ?, source_id = ?,
                        updated_at = ?, last_seen_at = ?, updated_run = ?

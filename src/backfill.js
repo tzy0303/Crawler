@@ -7,6 +7,25 @@ import { recomputeSiteFields } from './core/fields.js';
 import { openDb, tx } from './core/store.js';
 
 const db = openDb(config.dbFile);
+
+// 一次性修正（只執行一次，記在 migrations 資料表）
+db.exec('CREATE TABLE IF NOT EXISTS migrations (id TEXT PRIMARY KEY, ran_at TEXT NOT NULL)');
+const MIGRATIONS = {
+  // 104 通知信解析改版（欄位改名、去掉信件雜訊）造成的假「更新」：清掉修改紀錄，最新更新回到首次出現
+  '2026-11-02-mail104-reparse': () => {
+    db.prepare("DELETE FROM event_history WHERE event_id IN (SELECT id FROM events WHERE site_id = 'mail104')").run();
+    db.prepare("UPDATE events SET updated_at = created_at, updated_run = created_run WHERE site_id = 'mail104'").run();
+  },
+};
+for (const [id, run] of Object.entries(MIGRATIONS)) {
+  if (db.prepare('SELECT 1 FROM migrations WHERE id = ?').get(id)) continue;
+  tx(db, () => {
+    run();
+    db.prepare("INSERT INTO migrations (id, ran_at) VALUES (?, datetime('now'))").run(id);
+  });
+  log(`[修正] 已執行 ${id}`);
+}
+
 const defaults = new Map(loadSites(config).map((s) => [s.adapter.id, s.adapter.defaultLocation]));
 const rows = db.prepare('SELECT id, site_id, fields_json, description FROM events').all();
 const update = db.prepare('UPDATE events SET fields_json = ? WHERE id = ?');
