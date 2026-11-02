@@ -85,9 +85,20 @@ export function queryEvents(db, p) {
     }
   }
 
-  const sortCols = { created: 'e.created_at', updated: 'e.updated_at', name: 'e.name', seen: 'e.last_seen_at' };
-  const sort = sortCols[p.get('sort')] ?? 'e.created_at';
   const dir = p.get('dir') === 'asc' ? 'ASC' : 'DESC';
+  const sortCols = { created: 'e.created_at', updated: 'e.updated_at', name: 'e.name', seen: 'e.last_seen_at' };
+  const sortKey = p.get('sort') ?? '';
+  let order = `${sortCols[sortKey] ?? 'e.created_at'} ${dir}`;
+  if (sortKey === 'history') {
+    // 歷史時間點：更新次數，同次數時最近更新的優先
+    order = `(SELECT COUNT(*) FROM event_history h WHERE h.event_id = e.id) ${dir}, e.updated_at ${dir}`;
+  } else if (sortKey.startsWith('f:') && known.has(sortKey.slice(2))) {
+    // 網站欄位（活動日期、地區…）：欄位名稱來自白名單；沒有值的永遠排最後
+    const f = known.get(sortKey.slice(2));
+    const path = `'$."${f.key.replace(/["']/g, '')}"'`;
+    const expr = f.type === 'number' ? `CAST(json_extract(e.fields_json, ${path}) AS REAL)` : `json_extract(e.fields_json, ${path})`;
+    order = `(${expr} IS NULL OR ${expr} = ''), ${expr} ${dir}`;
+  }
   // size=all：下載用，取全部
   const size = p.get('size') === 'all' ? 100000 : Math.min(Math.max(Number(p.get('size')) || 50, 1), 500);
   const page = Math.max(Number(p.get('page')) || 1, 1);
@@ -98,7 +109,7 @@ export function queryEvents(db, p) {
       `SELECT e.id, e.name, e.url, e.fields_json, e.created_at, e.updated_at, e.last_seen_at, e.created_run, e.updated_run,
               (SELECT json_group_array(changed_at) FROM
                 (SELECT changed_at FROM event_history h WHERE h.event_id = e.id ORDER BY h.changed_at)) AS history_json
-       FROM events e WHERE ${w} ORDER BY ${sort} ${dir}, e.id DESC LIMIT ? OFFSET ?`,
+       FROM events e WHERE ${w} ORDER BY ${order}, e.id DESC LIMIT ? OFFSET ?`,
     )
     .all(...args, size, (page - 1) * size)
     .map(({ fields_json, history_json, ...r }) => withTimes({ ...r, fields: JSON.parse(fields_json) }, JSON.parse(history_json ?? '[]')));

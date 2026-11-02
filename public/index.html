@@ -413,7 +413,7 @@ async function loadEvents() {
   const keys = fields.filter((f) => f.type !== 'number').map((f) => f.key);
   const cols = [...keys.filter((k) => k === '地區'), ...keys.filter((k) => !['地區', '縣市', '地點'].includes(k))].slice(0, SHOW_COLS);
   const th = (key, label) => `<th data-sort="${key}">${label}${state.sort === key ? (state.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
-  const head = `<thead><tr>${th('name', '名稱')}${cols.map((c) => `<th>${esc(c)}</th>`).join('')}${th('created', '首次出現')}${th('updated', '最新更新')}<th title="首次出現＋每一次更新的時間">歷史時間點</th></tr></thead>`;
+  const head = `<thead><tr>${th('name', '名稱')}${cols.map((c) => th(`f:${c}`, esc(c))).join('')}${th('created', '首次出現')}${th('updated', '最新更新')}${th('history', '歷史時間點')}</tr></thead>`;
   const body = data.rows.map((r) => {
     const isNew = lastRun && r.created_run === lastRun.id;
     const isUpd = lastRun && r.updated_run === lastRun.id && r.created_run !== r.updated_run;
