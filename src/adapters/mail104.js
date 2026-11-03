@@ -30,8 +30,8 @@ const STRUCTURED = {
   管理責任: '管理責任', 出差外派: '出差外派', 上班時段: '上班時段', 休假制度: '休假制度',
   可上班日: '可上班日', 需求人數: '需求人數', 工作經歷: '經歷', 學歷要求: '學歷', 科系要求: '科系',
 };
-/** 像地址的短字串：開頭就是縣市＋鄉鎮市區，例如「台北市中正區」 */
-const LOOKS_LIKE_PLACE = /^(臺北|新北|桃園|臺中|臺南|高雄|基隆|新竹|嘉義|苗栗|彰化|南投|雲林|屏東|宜蘭|花蓮|臺東|澎湖|金門|連江)[市縣][^\s]{1,4}[區鄉鎮市]/;
+/** 像地址的短字串：開頭就是縣市＋鄉鎮市區（「台北市中正區」），或只有縣市（「新竹市」） */
+const LOOKS_LIKE_PLACE = /^(臺北|新北|桃園|臺中|臺南|高雄|基隆|新竹|嘉義|苗栗|彰化|南投|雲林|屏東|宜蘭|花蓮|臺東|澎湖|金門|連江)[市縣]([^\s]{1,4}[區鄉鎮市]|$)/;
 
 function hrefJobId(href, re = JOB_RE) {
   let h = String(href ?? '');
@@ -49,8 +49,55 @@ function hrefJobId(href, re = JOB_RE) {
   return null;
 }
 
+const isTitleAnchor = ($, a) => {
+  const t = clean($(a).text());
+  return t.length >= 2 && !BUTTON_RE.test(t);
+};
+const JOB_MARK = '\u0001', COMPANY_MARK = '\u0002';
+const APPLY_RE = /^(我要|立即)應徵/;
+
+/**
+ * 依信件順序切段：每個職缺 = 從它的標題到下一個職缺標題（或「我要應徵」）之間的行。
+ * 「配對日報」把所有職缺放在同一個表格、一個欄位一列，往上找不到只含單一職缺的區塊時用這個。
+ * @returns {Map<id, { company, lines }>}
+ */
+function mailSegments(html) {
+  const $ = cheerio.load(html);
+  const seen = new Set();
+  $('a[href]').each((_, a) => {
+    const href = $(a).attr('href');
+    const id = hrefJobId(href);
+    if (id && !seen.has(id) && isTitleAnchor($, a)) {
+      seen.add(id);
+      $(a).prepend(`${JOB_MARK}${id}${JOB_MARK}`);
+    } else if (!id && hrefJobId(href, COMPANY_LINK_RE)) {
+      $(a).prepend(COMPANY_MARK);
+    }
+  });
+  const segments = new Map();
+  let cur = null;
+  for (const raw of toLines($, $.root())) {
+    const job = raw.match(new RegExp(`${JOB_MARK}(\\w+)${JOB_MARK}`));
+    if (job) {
+      cur = { company: null, lines: [] };
+      segments.set(job[1], cur);
+      continue;
+    }
+    if (!cur) continue;
+    const line = clean(raw);
+    if (APPLY_RE.test(line)) {
+      cur = null;
+      continue;
+    }
+    if (raw.includes(COMPANY_MARK)) cur.company ??= clean(raw.replaceAll(COMPANY_MARK, ''));
+    else cur.lines.push(line);
+  }
+  return segments;
+}
+
 /** 解析一封通知信 → 職缺清單 */
 export function parseJobMail(html, { date = null, subject = '' } = {}) {
+  let segments = null; // 需要時才算
   const $ = cheerio.load(html);
   const jobs = new Map();
   $('a[href]').each((_, a) => {
@@ -63,10 +110,7 @@ export function parseJobMail(html, { date = null, subject = '' } = {}) {
   const mailDate = date ? new Date(date).toLocaleString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 10) : null;
   const items = [];
   for (const [id, anchors] of jobs) {
-    const titleA = anchors.find((a) => {
-      const t = clean($(a).text());
-      return t.length >= 2 && !BUTTON_RE.test(t);
-    });
+    const titleA = anchors.find((a) => isTitleAnchor($, a));
     if (!titleA) continue;
     const title = clean($(titleA).text());
 
@@ -84,7 +128,16 @@ export function parseJobMail(html, { date = null, subject = '' } = {}) {
     const companyA = box.find('a[href]').filter((_, x) => !!hrefJobId($(x).attr('href'), COMPANY_LINK_RE)).first();
     if (companyA.length && clean(companyA.text())) fields['公司'] = clean(companyA.text());
 
-    const lines = toLines($, box).map(clean).filter(Boolean);
+    let lines = toLines($, box).map(clean).filter(Boolean);
+    if (lines.every((l) => l === title)) {
+      // 區塊裡只有標題（配對日報）：改用信件順序切段
+      segments ??= mailSegments(html);
+      const seg = segments.get(id);
+      if (seg) {
+        lines = seg.lines;
+        if (!fields['公司'] && seg.company) fields['公司'] = seg.company;
+      }
+    }
     // 104 固定欄位：「標籤」一行、「值」一行（或「標籤：值」）
     for (let i = 0; i < lines.length; i++) {
       const m = lines[i].match(/^([^：:]{2,6})\s*[：:]?\s*(.*)$/);

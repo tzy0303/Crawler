@@ -16,6 +16,12 @@ const MIGRATIONS = {
     db.prepare("DELETE FROM event_history WHERE event_id IN (SELECT id FROM events WHERE site_id = 'mail104')").run();
     db.prepare("UPDATE events SET updated_at = created_at, updated_run = created_run WHERE site_id = 'mail104'").run();
   },
+  // 配對日報的公司、地點之前沒抓到，名稱少了「｜公司」：清掉 104 的資料，下次當作首次抓取，重讀最近 30 天的信
+  '2026-11-03-mail104-company': () => {
+    db.prepare("DELETE FROM event_history WHERE event_id IN (SELECT id FROM events WHERE site_id = 'mail104')").run();
+    db.prepare("DELETE FROM events WHERE site_id = 'mail104'").run();
+    db.prepare("DELETE FROM site_fields WHERE site_id = 'mail104'").run();
+  },
 };
 for (const [id, run] of Object.entries(MIGRATIONS)) {
   if (db.prepare('SELECT 1 FROM migrations WHERE id = ?').get(id)) continue;

@@ -420,3 +420,26 @@ test('github ensureWorkflowEnabled：被停用才重新啟用', async () => {
     assert.deepEqual(methods, expected);
   }
 });
+
+test('104 配對日報：所有職缺在同一個表格、一個欄位一列，也要抓到公司和地點', () => {
+  const job = (id, title, company, info, salary) => `
+    <tr><td><a href="https://www.104.com.tw/job/${id}?jobsource=match_mail">${title}</a></td></tr>
+    <tr><td><a href="https://www.104.com.tw/company/c${id}?jobsource=match_mail">${company}</a></td></tr>
+    <tr><td>${info}</td></tr>
+    <tr><td>【工作內容】負責系統開發，熟悉大學以上程度的資料結構</td></tr>
+    <tr><td>${salary}</td></tr>
+    <tr><td><a href="https://104app.onelink.me/x/apply?af_r=https://www.104.com.tw/job/${id}?apply=form">我要應徵</a></td></tr>`;
+  const html = `<table><tbody>
+    <tr><td><a href="https://pda.104.com.tw/work/mate/list/x">更多</a></td></tr>
+    ${job('aaa1', '後端工程師', '甲科技股份有限公司', '台北市中山區 | 經歷不拘 | 專科 | 軟體業', '年薪 600,000~900,000元')}
+    ${job('bbb2', '韌體工程師', '乙工業有限公司', '新竹市|3年以上|大學以上', '待遇面議')}
+  </tbody></table>`;
+  const items = parseJobMail(html, { subject: '配對日報' });
+  assert.deepEqual(items.map((i) => i.name), ['後端工程師｜甲科技股份有限公司', '韌體工程師｜乙工業有限公司']);
+  assert.equal(items[0].fields['工作地點'], '台北市中山區');
+  assert.equal(items[0].fields['學歷'], '專科');
+  assert.equal(items[0].fields['薪資'], '年薪 600,000~900,000元');
+  assert.equal(items[1].fields['工作地點'], '新竹市');
+  assert.equal(items[1].fields['經歷'], '3年以上');
+  assert.equal(items[1].fields['薪資'], '待遇面議');
+});

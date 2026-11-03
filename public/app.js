@@ -295,7 +295,9 @@ async function loadEvents() {
   $('tbl').innerHTML = '<tbody><tr><td class="loading">讀取中…</td></tr></tbody>';
   const data = await api(`/api/events?${p}`);
   const keys = fields.filter((f) => f.type !== 'number').map((f) => f.key);
-  const cols = [...keys.filter((k) => k === '地區'), ...keys.filter((k) => !['地區', '縣市', '地點'].includes(k))].slice(0, SHOW_COLS);
+  // 重要的欄位先放；縣市、地點（已有地區）和 104 信件本身的資訊（主旨、日期）不佔表格欄位
+  const FIRST = ['地區', '公司', '薪資'], HIDE = ['縣市', '地點', '信件主旨', '通知日期'];
+  const cols = [...FIRST.filter((k) => keys.includes(k)), ...keys.filter((k) => !FIRST.includes(k) && !HIDE.includes(k))].slice(0, SHOW_COLS);
   const th = (key, label) => `<th data-sort="${key}">${label}${state.sort === key ? (state.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
   const head = `<thead><tr>${th('name', '名稱')}${cols.map((c) => th(`f:${c}`, esc(c))).join('')}${th('created', '首次出現')}${th('updated', '最新更新')}${th('history', '歷史時間點')}</tr></thead>`;
   const body = data.rows.map((r) => {
