@@ -9,7 +9,7 @@ import { loadSites } from './adapters/index.js';
 import { config, ROOT } from './config.js';
 import { copyDir, removeDir } from './core/fsutil.js';
 import { now, openDb } from './core/store.js';
-import { deriveSiteKey, encryptWithKey, packBundle } from './shared/crypto.js';
+import { assertStrongPassword, deriveSiteKey, encryptWithKey, packBundle } from './shared/crypto.js';
 import { siteStats } from './shared/query.js';
 
 // Secrets 貼上時常多帶空白或換行；網頁登入時打的密碼不會有
@@ -19,6 +19,7 @@ if (!password && process.env.GITHUB_ACTIONS === 'true' && process.env.ALLOW_PUBL
   console.error('沒有 SITE_PASSWORD，停止匯出（不發佈未加密資料）。真的要公開資料才設 ALLOW_PUBLIC_DATA=true');
   process.exit(1);
 }
+if (password) assertStrongPassword(password);
 
 const out = resolve(process.argv[2] ?? '_site');
 removeDir(out);

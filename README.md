@@ -13,7 +13,7 @@
 
 ```bash
 npm install
-npm start                     # 網頁介面 + 每日排程：http://localhost:5190
+npm start                     # 網頁介面 + 每日排程：http://localhost:5190（只接受本機連線）
 npm run crawl                 # 手動抓所有啟用的網站（增量）
 npm run crawl -- --site beclass --pages 5
 npm run crawl -- --site beclass --full   # 全部頁面（BeClass 約 300 頁，要 1~2 小時）
@@ -69,7 +69,7 @@ npm test
 
 **注意：這個 GitHub 帳號不要再開其他 GitHub Pages 網站。** 同一帳號的所有 Pages 網站共用 `帳號.github.io` 這個網域，瀏覽器會讓它們共用儲存空間，其他網站的程式就能拿到這裡記住的登入金鑰和 GitHub 權杖。真的要開，請先替這個專案設定自訂網域（repo **Settings → Pages → Custom domain**），或改用另一個 GitHub 帳號。
 
-這是一組共用密碼，不是個人帳號。加密檔可以公開下載，所以密碼請設 12 個字以上。登入時可以勾選「記住這台裝置」，按右上角「登出」可以清除。
+這是一組共用密碼，不是個人帳號。加密檔可以公開下載，所以密碼**至少 12 個字**（少於 12 個字雲端會停止，不加密也不發佈）。登入時可以勾選「記住這台裝置」，按右上角「登出」可以清除。
 
 **出問題時的通知**：抓取失敗、網頁沒發佈、或 BeClass 超過 3 天沒更新（家裡電腦沒開機）時，會在 repo 開一個「每日抓取有問題」的 Issue，GitHub 會寄信給你；問題沒解決前每天在同一個 Issue 留言。處理好後關閉 Issue。
 
@@ -101,7 +101,8 @@ BeClass 封鎖雲端主機的 IP，所以由家裡電腦每天抓：Windows 工�
 | 設定 | 值 |
 |---|---|
 | 持久化磁碟 | 掛到 `/data`（資料庫、`sites.json`、日誌都在這裡）；**沒有掛磁碟的話，每次重新部署資料都會消失** |
-| `ADMIN_PASSWORD` | **一定要設**。網頁會要求登入，帳號預設 `admin` |
+| `ADMIN_PASSWORD` | **一定要設**（沒設會拒絕啟動）。網頁會要求登入，帳號預設 `admin`；同一個 IP 15 分鐘內錯 10 次會暫時封鎖 |
+| `HOST` | Docker 映像檔已設為 `0.0.0.0`（接受其他電腦連線）。本機版預設 `127.0.0.1`，只有這台電腦連得到 |
 | `ADMIN_USER` | 選填，登入帳號 |
 | `CRAWL_TIME` | 選填，每日抓取時間（台灣時間，預設 06:00） |
 | `PORT` | 平台通常會自動帶入，預設 8080 |
@@ -119,6 +120,13 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall-task.ps1  # 移除
 ```
 
 會建立 Windows 工作排程「網站更新爬蟲」，登入時在背景啟動 `src/server.js`。日誌在 `data/logs/YYYY-MM.log`。
+
+## 本機伺服器的安全設計
+
+- 預設只接受這台電腦的連線（`127.0.0.1`），同一個 Wi-Fi 的其他人連不到。要開放必須同時設 `HOST` 和 `ADMIN_PASSWORD`。
+- 其他網站不能冒用你的瀏覽器操作（新增、刪除網站，觸發抓取）：寫入類請求必須來自本站、而且是 JSON。
+- 爬蟲不會連到內部網路（路由器、內網設備、雲端主機資訊服務），每次轉址都會再檢查。
+- 新增、修改、刪除網站和登入失敗都會記在日誌（含來源 IP）。日誌保留 12 個月。
 
 ## 設定 `config.json`
 

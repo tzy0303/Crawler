@@ -2,7 +2,7 @@
 // 用法：node src/secure.js encrypt <輸入> <輸出>
 //       node src/secure.js decrypt <輸入> <輸出>   （輸入是未加密的舊檔時直接複製）
 import { readFileSync, writeFileSync } from 'node:fs';
-import { decryptBytes, encryptBytes, isEncrypted } from './shared/crypto.js';
+import { assertStrongPassword, decryptBytes, encryptBytes, isEncrypted } from './shared/crypto.js';
 
 const [cmd, input, output] = process.argv.slice(2);
 // Secrets 貼上時常多帶空白或換行；網頁登入時打的密碼不會有
@@ -13,6 +13,7 @@ if (!password) {
 }
 const bytes = new Uint8Array(readFileSync(input));
 if (cmd === 'encrypt') {
+  assertStrongPassword(password);
   writeFileSync(output, await encryptBytes(bytes, password));
 } else if (cmd === 'decrypt') {
   writeFileSync(output, isEncrypted(bytes) ? await decryptBytes(bytes, password) : bytes);

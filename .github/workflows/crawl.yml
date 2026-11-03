@@ -46,6 +46,9 @@ jobs:
       # 不執行套件的安裝腳本（目前的相依套件都不需要）；這一步沒有任何密碼
       - run: npm ci --ignore-scripts
 
+      # 程式有問題就不要抓、不要發佈（失敗會開 Issue 通知）
+      - run: npm test
+
       - name: 取回資料庫（data 分支）
         env:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}

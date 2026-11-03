@@ -3,6 +3,12 @@
 // 格式：'CRW1'(4) + salt(16) + iv(12) + ciphertext
 
 const MAGIC = [0x43, 0x52, 0x57, 0x31];
+
+/** 網站密碼至少 12 個字：加密檔可以公開下載，太短會被離線暴力猜出來 */
+export const MIN_PASSWORD_LENGTH = 12;
+export function assertStrongPassword(password) {
+  if ((password ?? '').length < MIN_PASSWORD_LENGTH) throw new Error(`SITE_PASSWORD 太短：至少要 ${MIN_PASSWORD_LENGTH} 個字`);
+}
 const ITERATIONS = 600_000;
 
 async function deriveKey(password, salt) {

@@ -9,13 +9,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { config, log } from './config.js';
 import { mergeSitesFrom } from './core/merge.js';
 import { openDb } from './core/store.js';
-import { decryptBytes, encryptBytes, isEncrypted } from './shared/crypto.js';
+import { assertStrongPassword, decryptBytes, encryptBytes, isEncrypted } from './shared/crypto.js';
 
 const [cmd, a, b] = process.argv.slice(2);
 const password = process.env.SITE_PASSWORD?.trim();
 const tmp = join(tmpdir(), `fragment-${process.pid}.db`);
 
 if (cmd === 'export') {
+  if (password) assertStrongPassword(password);
   const [siteId, out] = [a, b];
   const db = openDb(config.dbFile);
   db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);

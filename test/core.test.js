@@ -443,3 +443,18 @@ test('104 配對日報：所有職缺在同一個表格、一個欄位一列，�
   assert.equal(items[1].fields['經歷'], '3年以上');
   assert.equal(items[1].fields['薪資'], '待遇面議');
 });
+
+test('SSRF：內部網路位址一律擋下，公開位址放行', async () => {
+  const { isPrivateAddress } = await import('../src/core/fetcher.js');
+  for (const ip of ['127.0.0.1', '10.0.0.5', '172.16.0.1', '192.168.0.1', '169.254.169.254', '168.63.129.16', '100.64.1.1', '0.0.0.0', '::1', 'fe80::1', 'fd12::1', '::ffff:10.0.0.1']) {
+    assert.equal(isPrivateAddress(ip), true, ip);
+  }
+  for (const ip of ['8.8.8.8', '203.74.205.1', '172.32.0.1', '2001:4860::8888']) assert.equal(isPrivateAddress(ip), false, ip);
+});
+
+test('網站密碼至少 12 個字', async () => {
+  const { assertStrongPassword } = await import('../src/shared/crypto.js');
+  assert.throws(() => assertStrongPassword('short-pw'), /至少要 12/);
+  assert.throws(() => assertStrongPassword(undefined), /至少要 12/);
+  assert.doesNotThrow(() => assertStrongPassword('a-long-enough-password'));
+});

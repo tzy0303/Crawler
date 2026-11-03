@@ -1,4 +1,6 @@
 // 活動更新爬蟲：網頁程式（從 index.html 拆出來，才能套用嚴格的內容安全政策 CSP）
+// 被嵌進別的網站的框架時不顯示（防點擊劫持；GitHub Pages 不能設 X-Frame-Options）
+if (window.top !== window.self) { document.documentElement.hidden = true; throw new Error('不允許在框架中開啟'); }
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(Array.isArray(s) ? s.join('、') : s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const httpApi = async (u, opt) => { const r = await fetch(u, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); };
@@ -237,7 +239,7 @@ let siteList = [];
 async function loadSites(selectId) {
   siteList = await api('/api/sites');
   const keep = selectId ?? $('site').value;
-  $('site').innerHTML = siteList.map((s) => `<option value="${s.id}">${esc(s.name)}（${s.count}）${s.configured === false ? '（未設定信箱）' : s.enabled ? '' : '（已停用）'}</option>`).join('');
+  $('site').innerHTML = siteList.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}（${s.count}）${s.configured === false ? '（未設定信箱）' : s.enabled ? '' : '（已停用）'}</option>`).join('');
   if (siteList.some((s) => s.id === keep)) $('site').value = keep;
 }
 
@@ -440,9 +442,9 @@ function renderSiteTable() {
     const r = s.lastRun;
     const run = r ? `${esc(r.started_at.slice(5, 16))} ${r.status === 'done' ? `+${r.new_count} / *${r.updated_count}` : r.status === 'failed' ? `<span class="err" title="${esc(r.error)}">失敗</span>` : esc(r.status)}` : '—';
     return `<tr><td>${esc(s.name)}<div class="muted">${esc(s.baseUrl)}${s.custom ? '' : '（內建）'}${s.configured === false ? '<span class="err">（未設定信箱，請看 README）</span>' : ''}</div></td><td>${s.count}</td>
-      <td>${s.custom ? `<input type="checkbox" data-toggle="${s.id}" ${s.enabled ? 'checked' : ''} style="width:auto">` : (s.enabled ? '是' : '否')}</td>
+      <td>${s.custom ? `<input type="checkbox" data-toggle="${esc(s.id)}" ${s.enabled ? 'checked' : ''} style="width:auto">` : (s.enabled ? '是' : '否')}</td>
       <td class="t">${run}</td>
-      <td class="actions"><button data-crawl="${s.id}">抓取</button>${s.custom ? ` <button data-edit="${s.id}">編輯</button> <button data-del="${s.id}">刪除</button>` : ''}</td></tr>`;
+      <td class="actions"><button data-crawl="${esc(s.id)}">抓取</button>${s.custom ? ` <button data-edit="${esc(s.id)}">編輯</button> <button data-del="${esc(s.id)}">刪除</button>` : ''}</td></tr>`;
   }).join('');
 }
 
@@ -547,7 +549,7 @@ $('siteTbl').onclick = async (ev) => {
     const s = siteList.find((x) => x.id === b.dataset.del);
     if (!confirm(`刪除「${s.name}」？`)) return;
     const purge = !STATIC && confirm('連同已抓到的活動資料一起刪除嗎？\n按「確定」全部刪除；按「取消」只刪除網站設定，保留資料。');
-    try { await api(`/api/site-configs/${s.id}?purge=${purge ? 1 : 0}`, { method: 'DELETE' }); }
+    try { await api(`/api/site-configs/${encodeURIComponent(s.id)}?purge=${purge ? 1 : 0}`, { method: 'DELETE' }); }
     catch (e) { $('sf_msg').innerHTML = `<span class="err">${esc(errMsg(e))}</span>`; return; }
     // 雲端版的網站清單是發佈時的快照，要等 GitHub 重新發佈才會更新，先在畫面上拿掉
     if (STATIC) { STATIC.sites = STATIC.sites.filter((x) => x.id !== s.id); $('sf_msg').textContent = `已從 GitHub 刪除「${s.name}」，約 2～10 分鐘後重新整理頁面就會完全更新。`; }
