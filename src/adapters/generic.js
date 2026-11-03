@@ -34,6 +34,13 @@ export const canonical = (href) => {
   return u.host + u.pathname + sortedQuery(u);
 };
 
+/** 活動網址 → 穩定 ID（判斷同一筆活動用）：去掉 #、追蹤參數，參數排序 */
+export const urlSourceId = (href) => {
+  const u = new URL(href);
+  for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid$|gclid$|mc_)/i.test(k)) u.searchParams.delete(k);
+  return u.host + u.pathname.replace(/\/$/, '') + sortedQuery(u);
+};
+
 /** 細規則：數字/hex 一般化，例如 www.beclass.com/rid=* 、x.com/event?id=# */
 export const linkSignature = (href) => {
   const u = new URL(href);
@@ -252,7 +259,7 @@ export function createGenericAdapter(cfg) {
       for (const a of best.values()) {
         const box = $(a.el).closest('li,tr,article,.item,.card,.list-item');
         const fields = box.length ? extractFields(toLines($, box).filter((l) => l !== a.text)) : {};
-        items.push({ name: a.text, url: a.url, sourceId: null, fields });
+        items.push({ name: a.text, url: a.url, sourceId: urlSourceId(a.url), fields });
       }
       return { items, totalPages: paged || detectedTemplate ? null : 1 };
     },

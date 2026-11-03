@@ -3,18 +3,19 @@
 if (window.top !== window.self) { document.documentElement.hidden = true; throw new Error('不允許在框架中開啟'); }
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(Array.isArray(s) ? s.join('、') : s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-const httpApi = async (u, opt) => { const r = await fetch(u, opt); if (!r.ok) throw new Error(await r.text()); return r.json(); };
-const api = (u, opt) => (STATIC ? staticApi(u, opt) : httpApi(u, opt));
+const api = (u, opt) => staticApi(u, opt);
 const fail = (msg) => new Error(JSON.stringify({ error: msg }));
 const errMsg = (e) => { try { return JSON.parse(e.message).error ?? e.message; } catch { return e.message; } };
 /** 外部網站來的連結只允許 http/https，擋掉 javascript: 之類會在本站執行的網址 */
 const safeUrl = (u) => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : '#'; } catch { return '#'; } };
 
-// ---- 雲端靜態模式（GitHub Pages）：瀏覽器直接查 SQLite（sql.js），寫入走 GitHub API ----
+// ---- 雲端網頁（GitHub Pages）：瀏覽器直接查 SQLite（sql.js），寫入走 GitHub API ----
 let STATIC = null, Q = null, sqlDb = null;
 const SQLJS = 'vendor/'; // 放在自己網站上，不從外部 CDN 載入
 async function initStatic() {
-  try { const r = await fetch('static.json', { cache: 'no-store' }); if (!r.ok) return; STATIC = await r.json(); } catch { return; }
+  const r = await fetch('static.json', { cache: 'no-store' }).catch(() => null);
+  if (!r?.ok) throw fail('找不到網站資料（static.json）。這個網頁要由 src/export.js 匯出後才能使用。');
+  STATIC = await r.json();
   await new Promise((ok, no) => { const s = document.createElement('script'); s.src = SQLJS + 'sql-wasm.js'; s.onload = ok; s.onerror = () => no(new Error('sql.js 載入失敗')); document.head.appendChild(s); });
   const SQL = await initSqlJs({ locateFile: (f) => SQLJS + f });
   let dbBytes;
@@ -40,7 +41,6 @@ async function initStatic() {
   }
   sqlDb = new SQL.Database(dbBytes);
   Q = await import('./shared/query.js');
-  document.body.classList.add('static');
 }
 /**
  * 「記住這台裝置」只存不可匯出的金鑰（IndexedDB），不存明文密碼；30 天後自動失效。
@@ -208,9 +208,8 @@ async function staticApi(u, opt = {}) {
   if ((m = path.match(/^\/api\/events\/(\d+)$/))) return Q.getEvent(wrapDb, m[1]);
   if (path === '/api/runs') return Q.listRuns(wrapDb, p.get('site'), p.get('limit'));
   if (path === '/api/summary') return Q.siteSummary(wrapDb, p.get('site'));
-  if (path === '/api/status') return { crawling: false, crawlTime: STATIC.crawlTime, nextRunAt: null };
+  if (path === '/api/status') return { crawlTime: STATIC.crawlTime };
   if (path === '/api/crawl') { await gh.dispatch(body.site); return { started: true }; }
-  if (path === '/api/site-configs/preview') throw fail('雲端版無法即時預覽（瀏覽器不能直接讀取其他網站）。儲存後，GitHub 抓取時會自動判斷活動連結和分頁。');
   if (path === '/api/site-configs' && method === 'POST') {
     return gh.updateSites((list) => {
       const id = newId(body.listUrl, list);
@@ -339,9 +338,7 @@ async function loadRuns() {
   $('c_run').innerHTML = r ? (r.status === 'failed' ? `<span class="err">失敗：${esc(failReason(r.error))}</span>` : `${esc(rel(r.started_at))}　+${r.new_count} / *${r.updated_count}`) : '尚未執行';
   $('c_run_l').textContent = r ? `最近一次抓取（${r.started_at.slice(5, 16)}）` : '最近一次抓取';
   const st = await api('/api/status');
-  $('status').textContent = STATIC ? `資料更新於 ${STATIC.generatedAt}｜每天 ${st.crawlTime} 由 GitHub 自動抓取` : st.crawling ? '抓取中…' : `每天 ${st.crawlTime} 自動抓取｜下次：${st.nextRunAt ?? '-'}`;
-  $('crawlBtn').disabled = st.crawling;
-  return st.crawling;
+  $('status').textContent = `資料更新於 ${STATIC.generatedAt}｜每天 ${st.crawlTime} 由 GitHub 自動抓取`;
 }
 
 async function showEvent(id) {
@@ -420,22 +417,14 @@ $('tbl').onclick = (ev) => {
 };
 $('pager').onclick = (ev) => { const b = ev.target.closest('button[data-p]'); if (b) { state.page = Number(b.dataset.p); loadEvents(); } };
 async function startCrawl(site) {
-  if (STATIC) {
-    try { await api('/api/crawl', { method: 'POST', body: JSON.stringify({ site }) }); alert('已通知 GitHub 開始抓取，約 2～10 分鐘後重新整理頁面就會看到新資料。'); }
-    catch (e) { alert(errMsg(e)); }
-    return;
-  }
-  await api('/api/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ site }) });
-  const poll = setInterval(async () => {
-    if (!(await loadRuns())) { clearInterval(poll); await loadSites(); refreshAll(); if ($('sitesDlg').open) renderSiteTable(); }
-  }, 5000);
-  loadRuns();
+  try { await api('/api/crawl', { method: 'POST', body: JSON.stringify({ site }) }); alert('已通知 GitHub 開始抓取，約 2～10 分鐘後重新整理頁面就會看到新資料。'); }
+  catch (e) { alert(errMsg(e)); }
 }
 $('crawlBtn').onclick = () => startCrawl($('site').value);
 
 // ---- 網站管理 ----
 const post = (u, body, method = 'POST') => api(u, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-let editingId = null, lastPreview = null;
+let editingId = null;
 
 function renderSiteTable() {
   $('siteTbl').innerHTML = '<tr><th>網站</th><th>活動數</th><th>每天自動抓</th><th>最後抓取</th><th></th></tr>' + siteList.map((s) => {
@@ -449,12 +438,12 @@ function renderSiteTable() {
 }
 
 function resetForm() {
-  editingId = null; lastPreview = null;
+  editingId = null;
   $('formTitle').textContent = '新增網站';
   for (const k of ['name', 'listUrl', 'linkPattern', 'titleSelector', 'contentSelector', 'defaultLocation']) $(`sf_${k}`).value = '';
   $('sf_volatile').value = '';
   $('sf_maxPages').value = 5; $('sf_fetchDetail').checked = true; $('sf_trackDescription').checked = false; $('sf_encoding').value = 'auto';
-  $('sf_analysis').innerHTML = ''; $('sf_preview').innerHTML = ''; $('sf_msg').innerHTML = '';
+  $('sf_msg').innerHTML = '';
 }
 
 function formConfig() {
@@ -464,64 +453,22 @@ function formConfig() {
     titleSelector: $('sf_titleSelector').value.trim(), contentSelector: $('sf_contentSelector').value.trim(),
     trackDescription: $('sf_trackDescription').checked, encoding: $('sf_encoding').value,
     defaultLocation: $('sf_defaultLocation').value.trim(),
-    // 沒有預覽（例如分析失敗）時不送，避免把原本的設定清掉
-    volatileFields: STATIC ? $('sf_volatile').value.split(/[,，、]/).map((x) => x.trim()).filter(Boolean)
-      : document.querySelector('#sf_preview input[data-vol]')
-      ? [...document.querySelectorAll('#sf_preview input[data-vol]:checked')].map((c) => c.dataset.vol) : undefined,
+    volatileFields: $('sf_volatile').value.split(/[,，、]/).map((x) => x.trim()).filter(Boolean),
   };
-}
-
-function renderPreview(r, volatile = []) {
-  const cands = r.candidates.map((c) => `<div class="cand ${c.pattern === r.linkPattern ? 'sel' : ''}" data-pattern="${esc(c.pattern)}"><code>${esc(c.pattern)}</code>（${c.count} 個連結）<div class="muted">${c.samples.slice(0, 3).map(esc).join('｜')}</div></div>`).join('');
-  $('sf_analysis').innerHTML = (r.candidates.length ? `<div class="hint">找到的活動連結規則（點選切換，會重新預覽）：</div>${cands}` : '<div class="err">找不到重複出現的活動連結。可能原因：① 貼的是首頁，不是「活動列表頁」，請到網站上點進「最新活動 / 活動列表」，再複製那一頁的網址；② 列表是用 JavaScript 動態載入的（例如 104、Accupass），這類網站無法抓取。</div>') +
-    (r.pageTemplate && !$('sf_listUrl').value.includes('{page}') ? `<div class="hint">偵測到分頁：<code>${esc(r.pageTemplate)}</code> <button id="sf_usePage">使用分頁網址</button></div>` : '') +
-    (!$('sf_listUrl').value.includes('{page}') && !r.pageTemplate ? '<div class="hint">沒有偵測到分頁，只會抓這一頁。</div>' : '');
-  if (!$('sf_name').value && r.title) $('sf_name').value = r.title.slice(0, 40);
-  $('sf_linkPattern').value = r.linkPattern ?? '';
-  const keys = [...new Set(r.details.flatMap((d) => Object.keys(d.fields ?? {})).concat(r.items.flatMap((i) => Object.keys(i.fields))))];
-  $('sf_preview').innerHTML = r.items.length ? `<b>預覽：第 1 頁抓到 ${r.items.length} 個活動</b>
-    <div class="preview">${r.items.map((i) => `<div>・<a href="${esc(safeUrl(i.url))}" target="_blank">${esc(i.name)}</a></div>`).join('')}</div>
-    ${keys.length ? `<b style="display:block;margin-top:8px">抓到的欄位（前 ${r.details.length} 個活動）。勾選「每天會變」的欄位（例如剩餘名額、瀏覽次數），這些欄位變動不算修改：</b>
-    <div class="preview"><table><tr><th>欄位</th><th>範例值</th><th>每天會變</th></tr>${keys.map((k) => `<tr><td>${esc(k)}</td><td>${r.details.map((d) => esc(d.fields?.[k] ?? '')).filter(Boolean).slice(0, 2).join('｜')}</td><td><input type="checkbox" data-vol="${esc(k)}" ${volatile.includes(k) ? 'checked' : ''} style="width:auto"></td></tr>`).join('')}</table></div>` : '<div class="hint">沒有抓到「標籤：值」格式的欄位，仍會記錄活動名稱和新增/修改時間。</div>'}
-    ${r.details.filter((d) => d.error).map((d) => `<div class="err">詳細頁失敗：${esc(d.name)}：${esc(d.error)}</div>`).join('')}` : '';
-}
-
-async function analyze(volatile) {
-  if (STATIC) return;
-  const cfg = formConfig();
-  if (!cfg.listUrl) { $('sf_msg').innerHTML = '<span class="err">請輸入列表網址</span>'; return; }
-  $('sf_msg').textContent = '分析中…（會實際抓列表頁和前 3 個活動）';
-  $('sf_analyze').disabled = true;
-  try {
-    lastPreview = await post('/api/site-configs/preview', cfg);
-    renderPreview(lastPreview, volatile ?? cfg.volatileFields);
-    $('sf_msg').textContent = '';
-  } catch (e) {
-    $('sf_msg').innerHTML = `<span class="err">${esc(errMsg(e))}</span>`;
-  } finally { $('sf_analyze').disabled = false; }
 }
 
 $('sitesBtn').onclick = async () => { await loadSites(); renderSiteTable(); resetForm(); $('sitesDlg').showModal(); };
 $('sitesClose').onclick = () => $('sitesDlg').close();
-$('sf_analyze').onclick = () => analyze();
 $('sf_cancel').onclick = resetForm;
 $('clearToken').onclick = (ev) => { ev.preventDefault(); forgetGhToken(); alert('已清除。'); };
-$('sf_analysis').onclick = (ev) => {
-  const c = ev.target.closest('.cand');
-  if (c) { $('sf_linkPattern').value = c.dataset.pattern; analyze(); }
-  if (ev.target.id === 'sf_usePage') { $('sf_listUrl').value = lastPreview.pageTemplate; analyze(); }
-};
 $('sf_save').onclick = async () => {
   const cfg = formConfig();
   try {
     const r = editingId ? await post(`/api/site-configs/${editingId}`, cfg, 'PUT') : await post('/api/site-configs', cfg);
-    const id = editingId ?? r.id;
-    await loadSites(id);
+    await loadSites(editingId ?? r.id);
     renderSiteTable();
     resetForm();
-    if (STATIC) { $('sf_msg').textContent = '已儲存到 GitHub，系統會自動開始抓取（約 2～10 分鐘），完成後重新整理頁面就會看到這個網站。'; return; }
-    $('sf_msg').textContent = '已儲存。';
-    if (confirm('已儲存。要現在先抓一次嗎？')) { startCrawl(id); $('sitesDlg').close(); refreshAll(); }
+    $('sf_msg').textContent = '已儲存到 GitHub，系統會自動開始抓取（約 2～10 分鐘），完成後重新整理頁面就會看到這個網站。';
   } catch (e) {
     $('sf_msg').innerHTML = `<span class="err">${esc(errMsg(e))}</span>`;
   }
@@ -543,16 +490,15 @@ $('siteTbl').onclick = async (ev) => {
     $('sf_encoding').value = s.config.encoding || 'auto';
     $('sf_volatile').value = (s.config.volatileFields ?? []).join(', ');
     $('formTitle').scrollIntoView({ behavior: 'smooth' });
-    analyze(s.config.volatileFields ?? []);
   }
   if (b.dataset.del) {
     const s = siteList.find((x) => x.id === b.dataset.del);
     if (!confirm(`刪除「${s.name}」？`)) return;
-    const purge = !STATIC && confirm('連同已抓到的活動資料一起刪除嗎？\n按「確定」全部刪除；按「取消」只刪除網站設定，保留資料。');
-    try { await api(`/api/site-configs/${encodeURIComponent(s.id)}?purge=${purge ? 1 : 0}`, { method: 'DELETE' }); }
+    try { await api(`/api/site-configs/${encodeURIComponent(s.id)}`, { method: 'DELETE' }); }
     catch (e) { $('sf_msg').innerHTML = `<span class="err">${esc(errMsg(e))}</span>`; return; }
-    // 雲端版的網站清單是發佈時的快照，要等 GitHub 重新發佈才會更新，先在畫面上拿掉
-    if (STATIC) { STATIC.sites = STATIC.sites.filter((x) => x.id !== s.id); $('sf_msg').textContent = `已從 GitHub 刪除「${s.name}」，約 2～10 分鐘後重新整理頁面就會完全更新。`; }
+    // 網站清單是發佈時的快照，要等 GitHub 重新發佈才會更新，先在畫面上拿掉
+    STATIC.sites = STATIC.sites.filter((x) => x.id !== s.id);
+    $('sf_msg').textContent = `已從 GitHub 刪除「${s.name}」，約 2～10 分鐘後重新整理頁面就會完全更新。`;
     await loadSites(); renderSiteTable(); refreshAll();
   }
 };

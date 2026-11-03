@@ -1,5 +1,4 @@
 {
-  "port": 5190,
   "crawlTime": "12:00",
   "dbFile": "data/crawler.db",
   "sites": {

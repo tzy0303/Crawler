@@ -458,3 +458,64 @@ test('網站密碼至少 12 個字', async () => {
   assert.throws(() => assertStrongPassword(undefined), /至少要 12/);
   assert.doesNotThrow(() => assertStrongPassword('a-long-enough-password'));
 });
+
+test('同一筆用網站 ID 判斷：改名算修改、同名不同 ID 分開、舊資料用名稱認領', () => {
+  const db = openDb(':memory:');
+  assert.equal(upsertEvent(db, 's', { name: '2/14 司馬庫斯', url: 'u', sourceId: 'r1', fields: { 地點: '新竹' } }), 'new');
+  assert.equal(upsertEvent(db, 's', { name: '2/13 司馬庫斯', url: 'u', sourceId: 'r1', fields: { 地點: '新竹' } }), 'updated');
+  const rows = db.prepare("SELECT id, name FROM events WHERE site_id = 's'").all();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].name, '2/13 司馬庫斯');
+  const h = JSON.parse(db.prepare('SELECT changes_json FROM event_history WHERE event_id = ?').get(rows[0].id).changes_json);
+  assert.deepEqual(h['名稱'], { from: '2/14 司馬庫斯', to: '2/13 司馬庫斯' });
+  // 同名不同 ID：兩筆
+  assert.equal(upsertEvent(db, 's', { name: '親子營', url: 'a', sourceId: 'x1', fields: {} }), 'new');
+  assert.equal(upsertEvent(db, 's', { name: '親子營', url: 'b', sourceId: 'x2', fields: {} }), 'new');
+  // 舊資料沒有 ID：用名稱認領並補上 ID，不算新增
+  upsertEvent(db, 's', { name: '舊活動', url: 'c', sourceId: null, fields: {} });
+  assert.equal(upsertEvent(db, 's', { name: '舊活動', url: 'c', sourceId: 'old1', fields: {} }), 'same');
+  assert.equal(db.prepare("SELECT source_id FROM events WHERE name = '舊活動'").get().source_id, 'old1');
+});
+
+test('舊版資料庫升級：拿掉名稱唯一限制、同 ID 重複的合併成一筆並記下改名', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { rmSync } = await import('node:fs');
+  const file = join(tmpdir(), `migrate-${process.pid}.db`);
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, site_id TEXT NOT NULL, name TEXT NOT NULL, name_key TEXT NOT NULL,
+    url TEXT, source_id TEXT, fields_json TEXT NOT NULL DEFAULT '{}', description TEXT, content_hash TEXT, created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, created_run INTEGER, updated_run INTEGER, UNIQUE (site_id, name_key));
+    CREATE TABLE event_history (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL REFERENCES events (id),
+    run_id INTEGER, changed_at TEXT NOT NULL, changes_json TEXT NOT NULL);
+    INSERT INTO events VALUES (1,'b','舊名','舊名','u','r9','{}',NULL,'h1','2026-11-01 10:00:00','2026-11-01 10:00:00','2026-11-02 12:00:00',1,1);
+    INSERT INTO events VALUES (2,'b','新名','新名','u','r9','{"地點":"台北"}',NULL,'h2','2026-11-03 12:00:00','2026-11-03 12:00:00','2026-11-03 12:00:00',5,5);
+    INSERT INTO event_history VALUES (1,1,2,'2026-11-01 20:00:00','{"地點":{"from":null,"to":"x"}}');`);
+  old.close();
+  try {
+    const db = openDb(file);
+    assert.doesNotMatch(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'events'").get().sql, /UNIQUE/);
+    const rows = db.prepare('SELECT * FROM events').all();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, 1); // 保留最早的那筆
+    assert.equal(rows[0].created_at, '2026-11-01 10:00:00');
+    assert.equal(rows[0].name, '新名');
+    assert.equal(rows[0].updated_at, '2026-11-03 12:00:00');
+    const hist = db.prepare('SELECT changes_json FROM event_history WHERE event_id = 1 ORDER BY changed_at').all().map((r) => JSON.parse(r.changes_json));
+    assert.equal(hist.length, 2);
+    assert.deepEqual(hist[1]['名稱'], { from: '舊名', to: '新名' });
+    assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
+    db.close();
+  } finally {
+    rmSync(file, { force: true });
+    rmSync(`${file}-wal`, { force: true });
+    rmSync(`${file}-shm`, { force: true });
+  }
+});
+
+test('自訂網站：網址當 ID，去掉追蹤參數', async () => {
+  const { urlSourceId } = await import('../src/adapters/generic.js');
+  assert.equal(urlSourceId('https://www.accupass.com/event/123?utm_source=x&b=2&a=1#top'), 'www.accupass.com/event/123?a=1&b=2');
+  assert.equal(urlSourceId('https://x.com/e/9/'), urlSourceId('https://x.com/e/9'));
+});

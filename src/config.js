@@ -8,7 +8,6 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const raw = JSON.parse(readFileSync(join(ROOT, 'config.json'), 'utf8'));
 export const config = {
   ...raw,
-  port: Number(process.env.PORT ?? raw.port ?? 5190),
   crawlTime: process.env.CRAWL_TIME ?? raw.crawlTime ?? '06:00',
   dbFile: resolve(ROOT, process.env.DB_FILE ?? raw.dbFile ?? 'data/crawler.db'),
   sitesFile: resolve(ROOT, process.env.SITES_FILE ?? raw.sitesFile ?? 'sites.json'),

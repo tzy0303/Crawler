@@ -1,13 +1,13 @@
-import { DatabaseSync } from 'node:sqlite';
-import { tx } from './store.js';
+import { openDb, tx } from './store.js';
 
 /**
  * 把另一個資料庫（例如家裡電腦抓的 BeClass）裡的網站資料併進 db：
  * 這些網站的資料整批取代；id 重新編號，避免和 db 裡其他網站衝突。
+ * srcFile 會先用 openDb 升級成目前的格式（例如合併同 ID 的重複資料），所以要傳暫存的複本。
  * @returns 併入的網站 id
  */
 export function mergeSitesFrom(db, srcFile, log = console.log) {
-  const src = new DatabaseSync(srcFile, { readOnly: true });
+  const src = openDb(srcFile);
   const ids = src.prepare('SELECT DISTINCT site_id FROM events UNION SELECT DISTINCT site_id FROM crawl_runs').all().map((r) => r.site_id);
   tx(db, () => {
     for (const siteId of ids) {

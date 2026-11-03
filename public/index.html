@@ -78,12 +78,8 @@
   .form-grid .full { grid-column: 1 / -1; }
   .check { display:flex; gap:6px; align-items:center; color:var(--text); font-size:13px; }
   .check input { width:auto; }
-  .cand { border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin:4px 0; cursor:pointer; font-size:12px; }
-  .cand.sel { border-color:var(--accent); background:var(--accent-soft); }
-  .cand code { font-weight:600; }
   .hint { font-size:12px; color:var(--muted); margin:4px 0; }
   .err { color:var(--err); font-size:13px; }
-  .preview { max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:6px; margin-top:6px; font-size:12px; }
   details summary { cursor:pointer; color:var(--muted); font-size:12px; margin-top:8px; }
   .actions button { padding:3px 8px; font-size:12px; }
   /* 手機：表格改卡片 */
@@ -100,9 +96,6 @@
   #loginBox form { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; width:100%; max-width:340px; }
   #loginBox h2 { margin:0 0 4px; font-size:18px; }
   #loginBox button { width:100%; margin-top:12px; }
-  .static-only { display:none; }
-  body.static .static-only { display:revert; }
-  body.static .server-only { display:none; }
 </style>
 </head>
 <body>
@@ -173,24 +166,21 @@
   <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">網站管理</h3><button id="sitesClose">關閉</button></div>
   <div class="tablewrap"><table id="siteTbl" style="margin-top:8px"></table></div>
   <h3 id="formTitle" style="margin-top:20px">新增網站</h3>
-  <p class="hint static-only">雲端版：填好名稱和列表網址後直接儲存。設定會寫進 GitHub 的 sites.json 並自動開始抓取，活動連結和分頁會自動判斷，約 2～10 分鐘後重新整理頁面就看得到。第一次修改時會要求輸入 GitHub 權杖。<a href="#" id="clearToken">清除已存的權杖</a></p>
-  <p class="hint server-only">貼上活動「列表頁」網址後按「分析」，系統會自動找出活動連結和分頁規則。先預覽抓到的活動和欄位，確認後再儲存。新網站同樣會每天自動抓取、記錄新增/修改時間，也會依欄位產生篩選條件。</p>
+  <p class="hint">填好名稱和列表網址後直接儲存。設定會寫進 GitHub 的 sites.json 並自動開始抓取，活動連結和分頁會自動判斷，約 2～10 分鐘後重新整理頁面就看得到。第一次修改時會要求輸入 GitHub 權杖。<a href="#" id="clearToken">清除已存的權杖</a></p>
   <div class="form-grid">
     <div><label>網站名稱</label><input id="sf_name" placeholder="例如：華山文創活動"></div>
-    <div><label>列表網址（頁碼用 {page}）</label><div class="row"><input id="sf_listUrl" placeholder="https://example.com/events?page={page}"><button id="sf_analyze" class="server-only" style="flex:0 0 auto">分析</button></div></div>
-    <div class="full" id="sf_analysis"></div>
-    <div class="full"><label>活動連結規則（# = 數字、* = 任意一段）</label><input id="sf_linkPattern" placeholder="按「分析」自動產生；雲端版可留空，抓取時自動判斷"></div>
+    <div><label>列表網址（頁碼用 {page}）</label><input id="sf_listUrl" placeholder="https://example.com/events?page={page}"></div>
+    <div class="full"><label>活動連結規則（# = 數字、* = 任意一段）</label><input id="sf_linkPattern" placeholder="可留空，抓取時自動判斷"></div>
     <div class="full"><label>預設地點（選填：所有活動都在同一處時填，例如「華山1914文化創意產業園區（臺北市中正區八德路一段1號）」）</label><input id="sf_defaultLocation" placeholder="活動頁沒寫地點時使用"></div>
     <div><label>每次最多抓幾頁</label><input type="number" id="sf_maxPages" value="5" min="1" max="100"></div>
     <div><label>&nbsp;</label><label class="check"><input type="checkbox" id="sf_fetchDetail" checked> 進入每個活動的詳細頁抓欄位（較完整，但比較慢）</label></div>
     <div class="full"><details><summary>進階設定</summary><div class="form-grid">
       <div><label>標題 CSS 選擇器（選填）</label><input id="sf_titleSelector" placeholder="例如 h1.title"></div>
       <div><label>內容區 CSS 選擇器（選填）</label><input id="sf_contentSelector" placeholder="例如 .event-content"></div>
-      <div class="full static-only"><label>每天會變的欄位（逗號分隔，變動不算修改，例如：剩餘名額, 瀏覽次數）</label><input id="sf_volatile"></div>
+      <div class="full"><label>每天會變的欄位（逗號分隔，變動不算修改，例如：剩餘名額, 瀏覽次數）</label><input id="sf_volatile"></div>
       <div><label>編碼</label><select id="sf_encoding"><option value="auto">自動</option><option value="utf-8">UTF-8</option><option value="big5">Big5</option></select></div>
       <div><label>&nbsp;</label><label class="check"><input type="checkbox" id="sf_trackDescription"> 內文有變也算「修改」（建議搭配內容區選擇器）</label></div>
     </div></details></div>
-    <div class="full" id="sf_preview"></div>
     <div class="full row" style="justify-content:flex-end;margin-top:8px"><span id="sf_msg" style="flex:1"></span><button id="sf_cancel" style="flex:0 0 auto">清除</button><button id="sf_save" class="primary" style="flex:0 0 auto">儲存網站</button></div>
   </div>
 </dialog>
