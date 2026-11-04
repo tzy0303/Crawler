@@ -1,10 +1,11 @@
 // 家裡電腦每天抓 BeClass（BeClass 封鎖雲端主機 IP）→ 加密推到 data-beclass 分支 → 通知雲端合併並發佈網站。
 // 執行的是這台電腦上的程式，不是 GitHub 送來的：repo 被改也不會在這台電腦執行任何東西。
 // .env：SITE_PASSWORD、GH_SYNC_TOKEN（只授權此 repo：Contents、Actions 讀寫）、GH_REPO（例如 tzy0303/Crawler）
-//       選填 BECLASS_DB_FILE（預設 data/beclass.db）、GH_BRANCH（預設 main）
+//       選填 BECLASS_DB_FILE（預設 data/beclass.db）、GH_BRANCH（預設 main）、
+//       BACKUP_DIR（雲端資料庫的備份放哪，預設 data/backups；建議設成另一顆硬碟或雲端硬碟的同步資料夾）
 // 用法：node --env-file-if-exists=.env src/beclass-sync.js
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { log, ROOT } from './config.js';
@@ -51,4 +52,21 @@ try {
   process.exitCode = 1;
 } finally {
   rmSync(dir, { recursive: true, force: true });
+}
+
+// GitHub 以外的備份：每天把雲端的完整資料庫（已加密）存一份到這台電腦，保留最近 30 份。
+// GitHub 帳號或 repo 出事時，用 node src/secure.js decrypt 加上網站密碼就能還原。
+const BACKUP_KEEP = 30;
+try {
+  const backupDir = resolve(ROOT, env.BACKUP_DIR || 'data/backups');
+  mkdirSync(backupDir, { recursive: true });
+  const bytes = await gh.downloadFile('data', 'crawler.db.enc');
+  const file = `crawler-${now().slice(0, 10)}.db.enc`;
+  writeFileSync(join(backupDir, file), bytes);
+  const old = readdirSync(backupDir).filter((f) => /^crawler-\d{4}-\d{2}-\d{2}\.db\.enc$/.test(f)).sort().slice(0, -BACKUP_KEEP);
+  for (const f of old) unlinkSync(join(backupDir, f));
+  log(`[備份] 已存 ${join(backupDir, file)}（${(bytes.length / 1024 / 1024).toFixed(1)} MB${old.length ? `，刪掉 ${old.length} 份舊的` : ''}）`);
+} catch (err) {
+  log(`[備份] 失敗：${err.message}`);
+  process.exitCode = 1;
 }

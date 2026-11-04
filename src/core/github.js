@@ -27,6 +27,15 @@ export function githubClient({ repo, token, fetchImpl = fetch }) {
   };
 
   return {
+    /** 下載某個分支上的檔案原始內容（最大 100 MB） */
+    async downloadFile(ref, path) {
+      const r = await fetchImpl(`https://api.github.com/repos/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, {
+        headers: { Accept: 'application/vnd.github.raw', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!r.ok) throw Object.assign(new Error(`GitHub ${r.status} 下載 ${ref}:${path}`), { status: r.status });
+      return new Uint8Array(await r.arrayBuffer());
+    },
     /** 分支只放一個檔案、只留最新一份（沒有上一個 commit，強制覆蓋），回傳 commit sha */
     async replaceBranch(branch, path, bytes, message) {
       const blob = await call('POST', '/git/blobs', { content: Buffer.from(bytes).toString('base64'), encoding: 'base64' });

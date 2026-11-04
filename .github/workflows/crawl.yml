@@ -30,6 +30,7 @@ jobs:
     outputs:
       crawl_outcome: ${{ steps.crawl.outcome }}
       beclass_age_days: ${{ steps.merge.outputs.age_days }}
+      quality: ${{ steps.quality.outputs.problems }}
     env:
       TZ: Asia/Taipei
       DB_FILE: ${{ github.workspace }}/db/crawler.db
@@ -150,6 +151,23 @@ jobs:
           MAIL104_CONFIGURED: ${{ secrets.IMAP_USER != '' && secrets.IMAP_PASSWORD != '' }}
         run: node --disable-warning=ExperimentalWarning src/export.js _site
 
+      # 抓取成功但內容壞掉（網站改版、解析出錯）也要通知；網頁資料太大會讓手機變慢
+      - name: 資料品質與大小檢查
+        id: quality
+        run: |
+          problems="$(node --disable-warning=ExperimentalWarning src/quality.js)"
+          size=$(stat -c%s _site/data.enc 2>/dev/null || stat -c%s _site/crawler.db)
+          if [ "$size" -gt $((15 * 1024 * 1024)) ]; then
+            problems="${problems:+$problems
+          }網頁資料已經 $((size / 1024 / 1024)) MB，手機開啟會變慢；可以把 config.json 的 webRetentionDays 調小"
+          fi
+          if [ -n "$problems" ]; then
+            echo "$problems"
+            { echo 'problems<<END_OF_PROBLEMS'; echo "$problems"; echo 'END_OF_PROBLEMS'; } >> "$GITHUB_OUTPUT"
+          else
+            echo "沒有發現問題"
+          fi
+
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
@@ -175,7 +193,8 @@ jobs:
     if: >-
       always() && (needs.crawl.result != 'success' || needs.deploy.result != 'success'
       || needs.crawl.outputs.crawl_outcome == 'failure'
-      || fromJSON(needs.crawl.outputs.beclass_age_days || '0') >= 3)
+      || fromJSON(needs.crawl.outputs.beclass_age_days || '0') >= 3
+      || needs.crawl.outputs.quality != '')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -189,6 +208,7 @@ jobs:
           CRAWL_STEP: ${{ needs.crawl.outputs.crawl_outcome }}
           DEPLOY_JOB: ${{ needs.deploy.result }}
           BECLASS_AGE: ${{ needs.crawl.outputs.beclass_age_days }}
+          QUALITY: ${{ needs.crawl.outputs.quality }}
         run: |
           {
             date '+%F %T'
@@ -196,6 +216,7 @@ jobs:
             [ "$CRAWL_STEP" = "failure" ] && echo "- 有網站抓取失敗（其他網站照常更新）"
             [ "$DEPLOY_JOB" != "success" ] && echo "- 網頁沒有發佈"
             [ "${BECLASS_AGE:-0}" -ge 3 ] && echo "- BeClass 已經 ${BECLASS_AGE} 天沒更新（家裡電腦沒開機，或同步失敗：看家裡電腦的 data/logs）"
+            [ -n "$QUALITY" ] && printf '%s\n' "$QUALITY" | sed 's/^/- 資料品質：/'
             echo
             echo "執行紀錄：$RUN_URL"
           } > body.md || true

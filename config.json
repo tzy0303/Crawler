@@ -1,6 +1,7 @@
 {
   "crawlTime": "12:00",
   "dbFile": "data/crawler.db",
+  "webRetentionDays": 365,
   "sites": {
     "beclass": {
       "enabled": true,

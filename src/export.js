@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { loadSites } from './adapters/index.js';
 import { config, ROOT } from './config.js';
 import { copyDir, removeDir } from './core/fsutil.js';
+import { recomputeSiteFields } from './core/fields.js';
 import { now, openDb } from './core/store.js';
 import { assertStrongPassword, deriveSiteKey, encryptWithKey, packBundle } from './shared/crypto.js';
 import { siteStats } from './shared/query.js';
@@ -36,7 +37,17 @@ db.exec(`VACUUM INTO '${dbOut.replace(/'/g, "''")}'`);
 // 瀏覽器（sql.js）不能開 WAL 模式的檔案
 const copy = new DatabaseSync(dbOut);
 copy.exec('PRAGMA journal_mode = DELETE;');
-copy.close();
+// 網頁只放最近 webRetentionDays 天內還看得到的活動，資料量才不會越來越大（完整歷史仍在 data 分支的資料庫）
+const keepDays = Number(process.env.WEB_RETENTION_DAYS ?? config.webRetentionDays) || 365;
+const cutoff = new Date(Date.now() - keepDays * 86400_000).toLocaleString('sv-SE', { timeZone: 'Asia/Taipei' });
+const old = 'SELECT id FROM events WHERE last_seen_at < ?';
+copy.prepare(`DELETE FROM event_history WHERE event_id IN (${old})`).run(cutoff);
+const archived = Number(copy.prepare('DELETE FROM events WHERE last_seen_at < ?').run(cutoff).changes);
+if (archived) {
+  for (const { site_id } of copy.prepare('SELECT DISTINCT site_id FROM events').all()) recomputeSiteFields(copy, site_id);
+  copy.exec('VACUUM');
+  console.log(`網頁不含 ${keepDays} 天前就沒再出現的 ${archived} 筆（仍保留在完整資料庫）`);
+}
 
 const sites = loadSites(config).map((s) => ({
   id: s.adapter.id,
@@ -47,8 +58,9 @@ const sites = loadSites(config).map((s) => ({
   configured: s.adapter.configured !== false,
   maxPages: s.maxPages,
   config: s.config ?? null,
-  ...siteStats(db, s.adapter.id),
+  ...siteStats(copy, s.adapter.id), // 和網頁上的資料一致
 }));
+copy.close();
 const info = {
   generatedAt: now(),
   repo: process.env.GITHUB_REPOSITORY ?? null,

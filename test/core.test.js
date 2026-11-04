@@ -519,3 +519,29 @@ test('自訂網站：網址當 ID，去掉追蹤參數', async () => {
   assert.equal(urlSourceId('https://www.accupass.com/event/123?utm_source=x&b=2&a=1#top'), 'www.accupass.com/event/123?a=1&b=2');
   assert.equal(urlSourceId('https://x.com/e/9/'), urlSourceId('https://x.com/e/9'));
 });
+
+test('資料品質：最近資料某欄位填寫率大幅下降、或抓到 0 筆時回報', async () => {
+  const { checkQuality } = await import('../src/quality.js');
+  const db = openDb(':memory:');
+  const now = Date.parse('2026-11-04T12:00:00+08:00');
+  const add = (i, fields, seen) => db.prepare(
+    `INSERT INTO events (site_id, name, name_key, fields_json, created_at, updated_at, last_seen_at) VALUES ('s', ?, ?, ?, ?, ?, ?)`,
+  ).run(`活動${i}`, `活動${i}`, JSON.stringify(fields), seen, seen, seen);
+  for (let i = 0; i < 20; i++) add(i, { 公司: '甲公司', 薪資: '面議' }, '2026-10-01 12:00:00'); // 以前：都有公司
+  for (let i = 20; i < 35; i++) add(i, { 薪資: '面議' }, '2026-11-04 11:00:00'); // 最近：公司不見了
+  const problems = checkQuality(db, { now });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /「公司」填寫率從 100% 掉到 0%/);
+
+  db.prepare("INSERT INTO crawl_runs (site_id, trigger, started_at, status, seen) VALUES ('s', 'cli', '2026-11-04 11:00:00', 'done', 0)").run();
+  assert.ok(checkQuality(db, { now }).some((p) => /抓到 0 筆/.test(p)));
+});
+
+test('github downloadFile：用 raw 格式下載檔案', async () => {
+  const { githubClient } = await import('../src/core/github.js');
+  let seen;
+  const fetchImpl = async (url, opt) => { seen = [url, opt.headers.Accept]; return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([7, 8]).buffer }; };
+  const bytes = await githubClient({ repo: 'o/r', token: 't', fetchImpl }).downloadFile('data', 'crawler.db.enc');
+  assert.deepEqual([...bytes], [7, 8]);
+  assert.deepEqual(seen, ['https://api.github.com/repos/o/r/contents/crawler.db.enc?ref=data', 'application/vnd.github.raw']);
+});

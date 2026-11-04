@@ -53,13 +53,20 @@ npm test
 3. 抓各網站、讀 104 信；合併家裡電腦抓的 BeClass。
 4. 檢查活動筆數，少了 10% 以上就停止（資料可能被寫壞）。
 5. 加密存回 `data` 分支（只保留最新一份），另存 7 天備份。
-6. 匯出網頁並發佈到 Pages。
+6. 匯出網頁並發佈到 Pages（只放最近一年還看得到的活動，見下方）。
+7. 檢查資料品質和網頁資料大小。
 
 **立即抓取**：網頁的按鈕，或 GitHub → Actions → 每日抓取 → Run workflow。
 
-**出問題時的通知**：抓取失敗、網頁沒發佈、或 BeClass 超過 3 天沒更新（家裡電腦沒開機）時，會在 repo 開一個「每日抓取有問題」的 Issue，GitHub 會寄信給你；問題沒解決前每天在同一個 Issue 留言。處理好後關閉 Issue。
+**出問題時的通知**：抓取失敗、網頁沒發佈、BeClass 超過 3 天沒更新（家裡電腦沒開機）、資料品質有問題、或網頁資料超過 15 MB 時，會在 repo 開一個「每日抓取有問題」的 Issue，GitHub 會寄信給你；問題沒解決前每天在同一個 Issue 留言。處理好後關閉 Issue。
+
+**資料品質檢查**（`src/quality.js`）：抓取「成功」但內容壞掉時也會通知，例如網站改版後某個欄位抓不到。比較最近一次看到的資料和比較早的資料，以前至少 60% 有填的欄位，最近的填寫率掉到一半以下就回報；某個網站這次抓到 0 筆也回報。
+
+**網頁只放最近一年**：`config.json` 的 `webRetentionDays`（預設 365）天內還出現過的活動才放進網頁，網頁才不會越來越慢；完整歷史仍保留在 `data` 分支的資料庫和備份裡。
 
 **備份與還原**：到 Actions 找資料正常那天的執行 → 頁面下方 Artifacts 下載 `crawler-db-…` → 解壓縮得到 `crawler.db.enc` → 推到 `data` 分支取代現有檔案。
+
+**GitHub 以外的備份**：家裡電腦每天同步 BeClass 後，會把雲端的完整資料庫（已加密）下載一份到 `data/backups/crawler-日期.db.enc`，保留最近 30 份（一份約 11 MB）。建議在 `.env` 設 `BACKUP_DIR` 到另一顆硬碟或 OneDrive／Google Drive 的同步資料夾。還原：`node src/secure.js decrypt <備份檔> data/crawler.db`（需要 `.env` 的網站密碼）。
 
 public repo 連續 60 天沒有活動時，GitHub 會自動停用排程；家裡電腦每天同步 BeClass 時會檢查，被停用就自動重新啟用。
 
@@ -108,6 +115,7 @@ BeClass 封鎖雲端主機的 IP，所以由家裡電腦每天抓：Windows 工�
 |---|---|
 | `crawlTime` | 網頁上顯示的每日抓取時間（實際排程在 workflow 和家裡電腦的工作排程） |
 | `dbFile` | SQLite 檔案位置（環境變數 `DB_FILE` 優先） |
+| `webRetentionDays` | 網頁只放幾天內還出現過的活動（預設 365） |
 | `sites.<id>` | 內建網站的 `enabled`、`maxPages`（增量最多幾頁）、`initialPages`（第一次抓幾頁） |
 
 網頁新增的網站設定存在 `sites.json`。
@@ -127,6 +135,7 @@ src/core/        fetcher（速率限制/重試/擋內網）、extract（欄位�
                  fields（動態欄位）、store（SQLite 與升級）、crawler、merge、github
 src/shared/      查詢與加解密（Node 和瀏覽器共用）
 src/crawl.js     抓取指令
+src/quality.js   資料品質檢查
 src/backfill.js  重算衍生欄位、一次性資料修正
 src/export.js    匯出雲端網頁（加密）
 src/secure.js    資料庫加解密
