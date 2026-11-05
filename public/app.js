@@ -192,7 +192,7 @@ const gh = {
   },
   dispatch(site) {
     // BeClass 封鎖雲端主機，由家裡電腦每天排程抓；GitHub 不能遠端叫家裡電腦執行程式（安全考量）
-    if (site === 'beclass') return Promise.reject(fail('BeClass 由家裡電腦每天 12:00 自動抓取，網頁無法立即觸發。要馬上更新，請在家裡電腦執行工作排程「網站更新爬蟲 BeClass 同步」。'));
+    if (site === 'beclass') return Promise.reject(fail('BeClass 由家裡電腦每天 06:00 自動抓取，網頁無法立即觸發。要馬上更新，請在家裡電腦執行工作排程「網站更新爬蟲 BeClass 同步」。'));
     return this.call('/actions/workflows/crawl.yml/dispatches', { method: 'POST', body: JSON.stringify({ ref: STATIC.branch, inputs: { site: site || '' } }) });
   },
 };
@@ -313,7 +313,7 @@ async function loadEvents() {
   if (!data.total) {
     empty = $('site').value === 'mail104' && !p.has('filters') && !p.has('q')
       ? `<tr><td colspan="9" class="empty">還沒有職缺。系統會讀信箱裡 104 寄來的「職缺通知信」：<br>
-        到 104 搜尋職缺 → 儲存搜尋條件 →「訂閱・管理通知」選每日發送。收到後每天 ${esc(STATIC?.crawlTime ?? '12:00')} 會自動出現。</td></tr>`
+        到 104 搜尋職缺 → 儲存搜尋條件 →「訂閱・管理通知」選每日發送。收到後每天 ${esc(STATIC?.crawlTime ?? '06:00')} 會自動出現。</td></tr>`
       : '<tr><td colspan="9" class="empty">沒有符合條件的資料</td></tr>';
   }
   $('tbl').innerHTML = head + '<tbody>' + body + empty + '</tbody>';

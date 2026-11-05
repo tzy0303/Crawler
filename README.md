@@ -13,8 +13,8 @@
 
 | 在哪裡 | 做什麼 |
 |---|---|
-| 家裡電腦 | 每天 12:00 抓 BeClass（BeClass 封鎖雲端主機），加密推到 `data-beclass` 分支，通知雲端合併 |
-| GitHub Actions | 每天 12:30 抓其他網站、讀 104 信、合併 BeClass，存回 `data` 分支，發佈網頁；出錯時開 Issue |
+| 家裡電腦 | 每天 06:00 抓 BeClass（BeClass 封鎖雲端主機），加密推到 `data-beclass` 分支，通知雲端合併 |
+| GitHub Actions | 每天 06:30 抓其他網站、讀 104 信、合併 BeClass，存回 `data` 分支，發佈網頁；出錯時開 Issue |
 | GitHub Pages | 放網頁和加密資料 `data.enc` |
 | 你的瀏覽器 | 輸入網站密碼 → 解密 → 用 sql.js 查詢 |
 
@@ -46,7 +46,7 @@ npm test
 
 ## 每日抓取（雲端）
 
-`.github/workflows/crawl.yml`：每天台灣 12:30（GitHub 排程可能延遲）、家裡電腦推完 BeClass 後、或 main 有新程式時執行。
+`.github/workflows/crawl.yml`：每天台灣 06:30（GitHub 排程可能延遲）、家裡電腦推完 BeClass 後、或 main 有新程式時執行。
 
 1. 跑測試，失敗就不抓、不發佈。
 2. 從 `data` 分支取回資料庫並解密。
@@ -74,7 +74,7 @@ public repo 連續 60 天沒有活動時，GitHub 會自動停用排程；家裡
 
 ## BeClass（家裡電腦）
 
-BeClass 封鎖雲端主機的 IP，所以由家裡電腦每天抓：Windows 工作排程在 12:00 執行 `src/beclass-sync.js`，抓完加密推到 `data-beclass` 分支，再通知雲端合併並發佈網站。12:00 沒開機的話，開機後會補跑；家裡電腦一直沒開時，雲端 12:30 的排程仍會照常發佈其他網站。
+BeClass 封鎖雲端主機的 IP，所以由家裡電腦每天抓：Windows 工作排程在 06:00 執行 `src/beclass-sync.js`，抓完加密推到 `data-beclass` 分支，再通知雲端合併並發佈網站。06:00 沒開機的話，開機後會補跑；家裡電腦一直沒開時，雲端 06:30 的排程仍會照常發佈其他網站。
 
 家裡電腦執行的是這個資料夾裡的程式，GitHub 無法遠端叫它執行任何東西。所以 repo 就算被改，也不會影響家裡電腦。代價是程式更新後要自己 `git pull`，網頁上也不能「立即抓取」BeClass。
 

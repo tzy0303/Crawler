@@ -4,7 +4,7 @@ name: 每日抓取
 
 on:
   schedule:
-    - cron: '30 4 * * *'   # UTC 04:30 = 台灣 12:30（GitHub 排程可能延遲）
+    - cron: '30 22 * * *'  # UTC 22:30 = 台灣 06:30（GitHub 排程可能延遲）
   workflow_dispatch:        # 家裡電腦推完 BeClass 後會用 site=beclass 呼叫（src/beclass-sync.js）
     inputs:
       site:

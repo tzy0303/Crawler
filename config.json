@@ -1,5 +1,5 @@
 {
-  "crawlTime": "12:00",
+  "crawlTime": "06:00",
   "dbFile": "data/crawler.db",
   "webRetentionDays": 365,
   "sites": {

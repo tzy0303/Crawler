@@ -1,4 +1,4 @@
-﻿# 家裡電腦每天 12:00 抓 BeClass 並推到 GitHub（取代原本的 self-hosted runner）
+﻿# 家裡電腦每天 06:00 抓 BeClass 並推到 GitHub（取代原本的 self-hosted runner）
 # 執行的是這個資料夾裡的程式，不是 GitHub 送來的；要更新程式請自己 git pull。
 # 用法：powershell -ExecutionPolicy Bypass -File scripts\install-beclass-task.ps1
 $ErrorActionPreference = 'Stop'
@@ -25,8 +25,8 @@ if ((Test-Path -LiteralPath $OldDb) -and -not (Test-Path -LiteralPath $NewDb)) {
 $cmd = "Set-Location -LiteralPath '$Root'; & '$Node' --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/beclass-sync.js"
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
   -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$cmd`"" -WorkingDirectory $Root
-$trigger = New-ScheduledTaskTrigger -Daily -At '12:00'
-# StartWhenAvailable：12:00 沒開機的話，開機後補跑
+$trigger = New-ScheduledTaskTrigger -Daily -At '06:00'
+# StartWhenAvailable：06:00 沒開機的話，開機後補跑
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
   -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
 
@@ -35,5 +35,5 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 }
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
   -Description '每天抓 BeClass，加密推到 GitHub data-beclass 分支，再通知雲端合併發佈' | Out-Null
-Write-Host "已安裝「$TaskName」，每天 12:00 執行。日誌：data\logs\"
+Write-Host "已安裝「$TaskName」，每天 06:00 執行。日誌：data\logs\"
 Write-Host "要立刻試跑：Start-ScheduledTask -TaskName '$TaskName'"
