@@ -15,7 +15,8 @@ import { toLines } from '../core/extract.js';
 
 const JOB_RE = /104\.com\.tw\/job\/([0-9a-z]+)/i;
 const COMPANY_LINK_RE = /104\.com\.tw\/company\/([0-9a-z]+)/i;
-const BUTTON_RE = /^(我要|立即)?應徵|查看|詳情|更多|看更多|職缺內容|儲存|收藏|不感興趣|取消訂閱|more/i;
+// 按鈕：整段文字就是按鈕字樣才算（職缺標題可能剛好含「儲存」「更多」，例如「儲存系統軟體開發」）
+const BUTTON_RE = /^(?:(?:我要|立即)?應徵(?:職缺)?|(?:查看|看)(?:更多|詳情|職缺)?(?:職缺)?|詳情|更多(?:職缺)?|職缺內容|(?:儲存|收藏)(?:職缺)?|不感興趣|取消訂閱|(?:see |view )?more)$/i;
 
 const SALARY_RE = /月薪|年薪|時薪|日薪|論件|面議|\d[\d,]*\s*(元|萬)/;
 const EXP_RE = /經歷|工作經驗|年以上|經驗不拘/;

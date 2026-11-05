@@ -546,11 +546,13 @@ test('github downloadFile：用 raw 格式下載檔案', async () => {
   assert.deepEqual(seen, ['https://api.github.com/repos/o/r/contents/crawler.db.enc?ref=data', 'application/vnd.github.raw']);
 });
 
-test('104 通知信：「我要應徵」按鈕不是職缺', () => {
+test('104 通知信：「我要應徵」按鈕不是職缺；標題含「儲存」也不會被當成按鈕', () => {
   const html = `<table>
     <tr><td><a href="https://www.104.com.tw/job/aaa1">前端工程師</a></td></tr>
     <tr><td><a href="https://www.104.com.tw/job/aaa1?apply=1">我要應徵</a></td></tr>
-    <tr><td><a href="https://www.104.com.tw/job/bbb2?apply=1">我要應徵</a></td></tr></table>`;
+    <tr><td><a href="https://www.104.com.tw/job/7mk9q">Product Developer (Linux Kernel 儲存系統軟體開發)</a></td></tr>
+    <tr><td><a href="https://www.104.com.tw/job/7mk9q?apply=1">我要應徵</a></td></tr>
+    <tr><td><a href="https://www.104.com.tw/job/aaa1">查看更多</a></td></tr></table>`;
   const items = parseJobMail(html, {});
-  assert.deepEqual(items.map((i) => i.name), ['前端工程師']);
+  assert.deepEqual(items.map((i) => i.name), ['前端工程師', 'Product Developer (Linux Kernel 儲存系統軟體開發)']);
 });
