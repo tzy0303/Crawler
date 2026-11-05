@@ -22,6 +22,12 @@ const MIGRATIONS = {
     db.prepare("DELETE FROM events WHERE site_id = 'mail104'").run();
     db.prepare("DELETE FROM site_fields WHERE site_id = 'mail104'").run();
   },
+  // 信裡的「我要應徵」按鈕被當成職缺標題：刪掉這些假職缺
+  '2026-11-05-mail104-apply-button': () => {
+    const bad = "SELECT id FROM events WHERE site_id = 'mail104' AND (name GLOB '我要應徵*' OR name GLOB '立即應徵*' OR name GLOB '應徵*')";
+    db.prepare(`DELETE FROM event_history WHERE event_id IN (${bad})`).run();
+    db.prepare(`DELETE FROM events WHERE id IN (${bad})`).run();
+  },
 };
 for (const [id, run] of Object.entries(MIGRATIONS)) {
   if (db.prepare('SELECT 1 FROM migrations WHERE id = ?').get(id)) continue;

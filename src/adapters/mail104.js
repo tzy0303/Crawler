@@ -15,7 +15,7 @@ import { toLines } from '../core/extract.js';
 
 const JOB_RE = /104\.com\.tw\/job\/([0-9a-z]+)/i;
 const COMPANY_LINK_RE = /104\.com\.tw\/company\/([0-9a-z]+)/i;
-const BUTTON_RE = /^(立即)?應徵|查看|詳情|更多|看更多|職缺內容|儲存|收藏|不感興趣|取消訂閱|more/i;
+const BUTTON_RE = /^(我要|立即)?應徵|查看|詳情|更多|看更多|職缺內容|儲存|收藏|不感興趣|取消訂閱|more/i;
 
 const SALARY_RE = /月薪|年薪|時薪|日薪|論件|面議|\d[\d,]*\s*(元|萬)/;
 const EXP_RE = /經歷|工作經驗|年以上|經驗不拘/;
