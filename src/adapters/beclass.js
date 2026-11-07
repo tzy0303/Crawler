@@ -90,6 +90,8 @@ export default {
       const fromDesc = Object.entries(labelValues(description.split('\n'))).find(([k]) => /地點|地址/.test(k));
       if (fromDesc) fields['地點'] = fromDesc[1];
     }
-    return { name: $('h1.title').first().text().trim() || null, fields, description };
+    // 承辦人員帳號（「承辦人員其他活動」連結的 v=）：比對同一筆時當作「公司」，避免不同單位的同名活動被併在一起
+    const owner = $('a[href*="op=relation"]').attr('href')?.match(/[?&]v=([^&]+)/)?.[1] ?? null;
+    return { name: $('h1.title').first().text().trim() || null, fields, description, owner };
   },
 };

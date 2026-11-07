@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import beclass from '../src/adapters/beclass.js';
 import { deriveCity, labelValues, normalizeName } from '../src/core/extract.js';
-import { upsertEvent } from '../src/core/differ.js';
+import { matchKey, upsertEvent } from '../src/core/differ.js';
 import { getSiteFields, inferType, recomputeSiteFields } from '../src/core/fields.js';
 import { openDb } from '../src/core/store.js';
 import { runCrawl } from '../src/core/crawler.js';
@@ -468,13 +468,93 @@ test('同一筆用網站 ID 判斷：改名算修改、同名不同 ID 分開、
   assert.equal(rows[0].name, '2/13 司馬庫斯');
   const h = JSON.parse(db.prepare('SELECT changes_json FROM event_history WHERE event_id = ?').get(rows[0].id).changes_json);
   assert.deepEqual(h['名稱'], { from: '2/14 司馬庫斯', to: '2/13 司馬庫斯' });
-  // 同名不同 ID：兩筆
-  assert.equal(upsertEvent(db, 's', { name: '親子營', url: 'a', sourceId: 'x1', fields: {} }), 'new');
-  assert.equal(upsertEvent(db, 's', { name: '親子營', url: 'b', sourceId: 'x2', fields: {} }), 'new');
+  // 同一次抓取裡同標題、不同 ID：算同一筆，只記第一個看到的，後面的不蓋掉
+  const seen = new Set();
+  assert.equal(upsertEvent(db, 's', { name: '親子營', url: 'a', sourceId: 'x1', fields: { 活動日期: '2026-11-02' } }, { seen }), 'new');
+  assert.equal(upsertEvent(db, 's', { name: '親子營', url: 'b', sourceId: 'x2', fields: { 活動日期: '2026-11-09' } }, { seen }), 'same');
+  assert.equal(db.prepare("SELECT source_id FROM events WHERE name = '親子營'").get().source_id, 'x1');
   // 舊資料沒有 ID：用名稱認領並補上 ID，不算新增
   upsertEvent(db, 's', { name: '舊活動', url: 'c', sourceId: null, fields: {} });
   assert.equal(upsertEvent(db, 's', { name: '舊活動', url: 'c', sourceId: 'old1', fields: {} }), 'same');
   assert.equal(db.prepare("SELECT source_id FROM events WHERE name = '舊活動'").get().source_id, 'old1');
+});
+
+test('比對鍵：公司（作者）＋標題', () => {
+  assert.equal(matchKey('工程師｜A 公司', { 公司: 'A 公司' }), JSON.stringify(['A 公司', '工程師'])); // 104
+  assert.equal(matchKey('電影收藏（ppp）', { 作者: 'ppp' }), JSON.stringify(['ppp', '電影收藏'])); // IT 邦幫忙
+  assert.equal(matchKey('團扇工作坊', {}, 'OWN1'), JSON.stringify(['OWN1', '團扇工作坊'])); // BeClass
+  assert.equal(matchKey('華山市集', {}), JSON.stringify(['', '華山市集'])); // 自訂網站
+  assert.notEqual(matchKey('11/14 團扇工作坊', {}, 'O'), matchKey('11/21 團扇工作坊', {}, 'O')); // 標題照原樣比
+});
+
+test('網站重開換 ID：公司（作者）＋標題相同就接回原本那筆（所有網站）', () => {
+  const db = openDb(':memory:');
+  const job = (id, extra = {}) => ({ name: '工程師｜A 公司', url: `https://www.104.com.tw/job/${id}`, sourceId: id,
+    fields: { 公司: 'A 公司', 薪資: '月薪 4萬', ...extra } });
+  assert.equal(upsertEvent(db, 's', job('j1')), 'new');
+  // 下一次抓取（新的 seen）
+  assert.equal(upsertEvent(db, 's', job('j2'), { seen: new Set() }), 'same');
+  let rows = db.prepare('SELECT source_id, url FROM events').all();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].source_id, 'j2');
+  assert.equal(rows[0].url, 'https://www.104.com.tw/job/j2');
+  // 重開又改了薪資：算修改
+  assert.equal(upsertEvent(db, 's', job('j3', { 薪資: '月薪 5萬' }), { seen: new Set() }), 'updated');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM events').get().n, 1);
+  // 不同公司同職稱：分開
+  assert.equal(upsertEvent(db, 's', { ...job('k1'), name: '工程師｜B 公司', fields: { 公司: 'B 公司' } }), 'new');
+  // 104 信裡沒寫公司的舊資料：之後有公司的同職稱認領它
+  assert.equal(upsertEvent(db, 'm', { name: '設計師', url: 'x', sourceId: 'd1', fields: {} }), 'new');
+  assert.equal(upsertEvent(db, 'm', { name: '設計師｜C 公司', url: 'y', sourceId: 'd2', fields: { 公司: 'C 公司' } }, { seen: new Set() }), 'updated');
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM events WHERE site_id = 'm'").get().n, 1);
+
+  // BeClass：重開換 rid、改了日期，同承辦人員同標題 → 同一筆，改日期算修改
+  const bc = (rid, date, owner = 'OWN1') => ({ name: '團扇工作坊', url: `https://www.beclass.com/rid=${rid}`, sourceId: rid, owner,
+    fields: { 活動日期: date } });
+  assert.equal(upsertEvent(db, 'b', bc('r1', '2026-11-14')), 'new');
+  assert.equal(upsertEvent(db, 'b', bc('r2', '2026-11-21'), { seen: new Set() }), 'updated');
+  assert.equal(db.prepare("SELECT source_id FROM events WHERE site_id = 'b'").get().source_id, 'r2');
+  // 別的承辦人員辦的同名活動：分開
+  assert.equal(upsertEvent(db, 'b', bc('r9', '2026-11-21', 'OWN2'), { seen: new Set() }), 'new');
+  // RSS（partial，沒有承辦人員）：只比標題，認得已有的，不新增
+  assert.equal(upsertEvent(db, 'b', bc('r3', '2026-11-28', null), { partial: true, seen: new Set() }), 'same');
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM events WHERE site_id = 'b'").get().n, 2);
+  assert.match(db.prepare("SELECT match_key FROM events WHERE source_id = 'r3'").get().match_key, /OWN/);
+});
+
+test('舊資料庫加比對鍵：同公司同標題、不同 ID 的合併成一筆，不同標題的不動', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { rmSync } = await import('node:fs');
+  const file = join(tmpdir(), `matchkey-${process.pid}.db`);
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, site_id TEXT NOT NULL, name TEXT NOT NULL, name_key TEXT NOT NULL,
+    url TEXT, source_id TEXT, fields_json TEXT NOT NULL DEFAULT '{}', description TEXT, content_hash TEXT, created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, created_run INTEGER, updated_run INTEGER);
+    CREATE TABLE event_history (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL REFERENCES events (id),
+    run_id INTEGER, changed_at TEXT NOT NULL, changes_json TEXT NOT NULL);
+    INSERT INTO events VALUES (1,'b','營隊','營隊','u1','r1','{"活動日期":"2026-11-01"}',NULL,'h','2026-10-01 06:00:00','2026-10-01 06:00:00','2026-10-05 06:00:00',1,1);
+    INSERT INTO events VALUES (2,'b','營隊','營隊','u2','r2','{"活動日期":"2026-11-08"}',NULL,'h','2026-10-06 06:00:00','2026-10-06 06:00:00','2026-10-09 06:00:00',2,2);
+    INSERT INTO events VALUES (3,'b','講座','講座','u3','r3','{"活動日期":"2027-02-01"}',NULL,'h','2026-10-01 06:00:00','2026-10-01 06:00:00','2026-10-09 06:00:00',1,1);
+    INSERT INTO events VALUES (4,'b','說明會','說明會','u4','r4','{"活動日期":"2027-02-01"}',NULL,'h','2026-10-03 06:00:00','2026-10-03 06:00:00','2026-10-09 06:00:00',1,1);`);
+  old.close();
+  try {
+    const db = openDb(file);
+    const rows = db.prepare('SELECT id, name, source_id, url, created_at, last_seen_at, match_key FROM events ORDER BY id').all();
+    assert.deepEqual(rows.map((r) => r.id), [1, 3, 4]);
+    assert.equal(rows[0].name, '營隊');
+    assert.equal(rows[0].source_id, 'r2');
+    assert.equal(rows[0].url, 'u2');
+    assert.equal(rows[0].created_at, '2026-10-01 06:00:00');
+    assert.equal(rows[0].last_seen_at, '2026-10-09 06:00:00');
+    assert.ok(rows.every((r) => r.match_key));
+    db.close();
+  } finally {
+    rmSync(file, { force: true });
+    rmSync(`${file}-wal`, { force: true });
+    rmSync(`${file}-shm`, { force: true });
+  }
 });
 
 test('舊版資料庫升級：拿掉名稱唯一限制、同 ID 重複的合併成一筆並記下改名', async () => {

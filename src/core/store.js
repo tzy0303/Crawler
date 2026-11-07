@@ -1,13 +1,16 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { matchKey } from './differ.js';
 
-// 同一筆活動：有網站自己的 ID（source_id）就用 ID 判斷，沒有才用名稱；所以名稱不設 UNIQUE（同名不同場次可以並存）
+// 同一筆活動：網站 ID（source_id）相同，或「公司＋名稱＋日期」（match_key）相同（網站重開會換 ID）。
+// 名稱不設 UNIQUE（同名不同場次可以並存）
 const EVENTS_COLUMNS = `
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   site_id TEXT NOT NULL,
   name TEXT NOT NULL,
   name_key TEXT NOT NULL,
+  match_key TEXT,
   url TEXT,
   source_id TEXT,
   fields_json TEXT NOT NULL DEFAULT '{}',
@@ -81,6 +84,7 @@ export function openDb(file) {
  *  1. 拿掉「名稱不可重複」的限制（要重建資料表，SQLite 不能直接刪限制）
  *  2. 同一個 ID 有多筆（活動改名後被當成新活動）→ 合併成一筆，保留最早的首次出現時間，改名記進修改紀錄
  *  3. 建立「同網站同 ID 只能一筆」的索引
+ *  4. 加上比對鍵（公司＋名稱＋日期）；網站重開換 ID 而被記成兩筆的（前一筆消失後才出現下一筆）合併成一筆
  */
 function migrateEvents(db) {
   const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'events'").get();
@@ -89,9 +93,10 @@ function migrateEvents(db) {
     db.exec('PRAGMA foreign_keys = OFF');
     try {
       tx(db, () => {
+        const cols = `id, site_id, name, name_key, url, source_id, fields_json, description, content_hash,
+            created_at, updated_at, last_seen_at, created_run, updated_run`;
         db.exec(`CREATE TABLE events_new (${EVENTS_COLUMNS});
-          INSERT INTO events_new SELECT id, site_id, name, name_key, url, source_id, fields_json, description, content_hash,
-            created_at, updated_at, last_seen_at, created_run, updated_run FROM events;
+          INSERT INTO events_new (${cols}) SELECT ${cols} FROM events;
           DROP TABLE events;
           ALTER TABLE events_new RENAME TO events;`);
         db.exec(SCHEMA); // 重建索引
@@ -103,12 +108,40 @@ function migrateEvents(db) {
   const groups = db.prepare(
     'SELECT site_id, source_id FROM events WHERE source_id IS NOT NULL GROUP BY site_id, source_id HAVING COUNT(*) > 1',
   ).all();
-  if (groups.length) tx(db, () => groups.forEach((g) => mergeDuplicates(db, g.site_id, g.source_id)));
+  if (groups.length) {
+    tx(db, () => groups.forEach((g) => mergeRows(db,
+      db.prepare('SELECT * FROM events WHERE site_id = ? AND source_id = ? ORDER BY created_at, id').all(g.site_id, g.source_id))));
+  }
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_events_source ON events (site_id, source_id) WHERE source_id IS NOT NULL');
+  migrateMatchKey(db);
 }
 
-function mergeDuplicates(db, siteId, sourceId) {
-  const rows = db.prepare('SELECT * FROM events WHERE site_id = ? AND source_id = ? ORDER BY created_at, id').all(siteId, sourceId);
+// 比對鍵規則的版本（存在資料庫的 user_version）；規則改了就加 1，開啟時會全部重算並合併
+const MATCH_KEY_VERSION = 1; // 1：公司（作者）＋標題
+
+function migrateMatchKey(db) {
+  const hasCol = db.prepare('PRAGMA table_info(events)').all().some((c) => c.name === 'match_key');
+  if (!hasCol) db.exec('ALTER TABLE events ADD COLUMN match_key TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_events_match ON events (site_id, match_key)');
+  const outdated = db.prepare('PRAGMA user_version').get().user_version < MATCH_KEY_VERSION;
+  const rows = db.prepare(`SELECT id, name, fields_json FROM events ${outdated ? '' : 'WHERE match_key IS NULL'}`).all();
+  const setKey = db.prepare('UPDATE events SET match_key = ? WHERE id = ?');
+  tx(db, () => {
+    for (const r of rows) setKey.run(matchKey(r.name, JSON.parse(r.fields_json)), r.id);
+    if (!outdated) return; // 平常只補沒有比對鍵的；合併只在規則改版時做一次
+    // 同公司同標題、不同 ID 的（網站重開）合併成一筆
+    const groups = db.prepare(
+      'SELECT site_id, match_key FROM events GROUP BY site_id, match_key HAVING COUNT(*) > 1',
+    ).all();
+    for (const g of groups) {
+      mergeRows(db, db.prepare('SELECT * FROM events WHERE site_id = ? AND match_key = ? ORDER BY created_at, id').all(g.site_id, g.match_key));
+    }
+    db.exec(`PRAGMA user_version = ${MATCH_KEY_VERSION}`);
+  });
+}
+
+/** 多筆合併成一筆（rows 依首次出現排序）：保留最早那筆的 id 和首次出現時間，內容、網址、ID 用最新的 */
+function mergeRows(db, rows) {
   const [keep, ...others] = rows;
   const latest = rows.reduce((a, b) => (b.last_seen_at > a.last_seen_at || (b.last_seen_at === a.last_seen_at && b.id > a.id) ? b : a));
   let prevName = keep.name;
@@ -124,9 +157,9 @@ function mergeDuplicates(db, siteId, sourceId) {
   const maxOf = (k) => rows.map((r) => r[k]).sort().at(-1);
   const updatedAt = [maxOf('updated_at'), ...others.map((o) => o.created_at)].sort().at(-1);
   db.prepare(
-    `UPDATE events SET name = ?, name_key = ?, url = ?, fields_json = ?, description = ?, content_hash = ?,
+    `UPDATE events SET name = ?, name_key = ?, match_key = ?, source_id = ?, url = ?, fields_json = ?, description = ?, content_hash = ?,
        updated_at = ?, last_seen_at = ?, updated_run = ? WHERE id = ?`,
-  ).run(latest.name, latest.name_key, latest.url, latest.fields_json, latest.description, latest.content_hash,
+  ).run(latest.name, latest.name_key, latest.match_key ?? null, latest.source_id ?? keep.source_id, latest.url, latest.fields_json, latest.description, latest.content_hash,
     updatedAt, maxOf('last_seen_at'), latest.updated_run ?? latest.created_run, keep.id);
 }
 

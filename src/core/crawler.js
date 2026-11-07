@@ -5,6 +5,8 @@ import { recomputeSiteFields } from './fields.js';
 import { ensureSite, finishRun, startRun } from './store.js';
 
 const QUIET_PAGES_TO_STOP = 2;
+// 同一次抓取裡重複出現的判斷（翻頁重疊）：有網站 ID 用 ID，同名不同場次不會被略過
+const itemKey = (item) => item.sourceId ?? normalizeName(item.name);
 // GitHub Actions 的執行紀錄是公開的：雲端只記數量，不印出活動/職缺名稱
 const ON_CI = !!process.env.GITHUB_ACTIONS;
 
@@ -19,6 +21,7 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
   ensureSite(db, adapter);
   const isFirstRun = !db.prepare('SELECT 1 FROM events WHERE site_id = ? LIMIT 1').get(adapter.id);
   const pageLimit = full ? Infinity : isFirstRun ? initialPages : maxPages;
+  const seenRows = new Set(); // 這次已對到的資料列：不能再被「公司＋名稱＋日期」認領（見 findExisting）
   const runId = startRun(db, adapter.id, trigger);
   const stats = { pages: 0, seen: 0, newCount: 0, updatedCount: 0, failedDetails: 0 };
   const seenKeys = new Set();
@@ -30,8 +33,8 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
     const fields = { ...item.fields, ...extra.fields };
     const derived = addDerivedFields(fields, { defaultLocation: adapter.defaultLocation, text: extra.description });
     const result = upsertEvent(db, adapter.id,
-      { name: item.name, url: item.url, sourceId: item.sourceId, fields, description: extra.description },
-      { runId, volatile: [...volatile, ...derived], partial });
+      { name: item.name, url: item.url, sourceId: item.sourceId, owner: extra.owner ?? item.owner ?? null, fields, description: extra.description },
+      { runId, seen: seenRows, volatile: [...volatile, ...derived], partial });
     stats.seen++;
     if (result === 'new') {
       stats.newCount++;
@@ -74,7 +77,7 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
         const items = adapter.fallback.parse(await fetch(adapter.fallback.url, fetchOpts));
         stats.pages = 1;
         for (const item of items) {
-          const key = normalizeName(item.name);
+          const key = itemKey(item);
           if (seenKeys.has(key)) continue;
           seenKeys.add(key);
           record(item, {}, true);
@@ -84,10 +87,10 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
       const { items, totalPages } = adapter.parseList(html, listUrl);
       stats.pages = page;
       // 沒有資料，或整頁都是這次已看過的（超過最後一頁時有些網站會重複顯示最後一頁）→ 結束
-      if (!items.length || items.every((i) => seenKeys.has(normalizeName(i.name)))) break;
+      if (!items.length || items.every((i) => seenKeys.has(itemKey(i)))) break;
       let changed = 0;
       for (const item of items) {
-        const key = normalizeName(item.name);
+        const key = itemKey(item);
         if (seenKeys.has(key)) continue;
         seenKeys.add(key);
         let detail;

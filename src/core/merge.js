@@ -32,10 +32,10 @@ export function mergeSitesFrom(db, srcFile, log = console.log) {
       const eventMap = new Map();
       for (const e of src.prepare('SELECT * FROM events WHERE site_id = ? ORDER BY id').all(siteId)) {
         const { lastInsertRowid } = db.prepare(
-          `INSERT INTO events (site_id, name, name_key, url, source_id, fields_json, description, content_hash,
+          `INSERT INTO events (site_id, name, name_key, match_key, url, source_id, fields_json, description, content_hash,
                                created_at, updated_at, last_seen_at, created_run, updated_run)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(e.site_id, e.name, e.name_key, e.url, e.source_id, e.fields_json, e.description, e.content_hash,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(e.site_id, e.name, e.name_key, e.match_key, e.url, e.source_id, e.fields_json, e.description, e.content_hash,
           e.created_at, e.updated_at, e.last_seen_at, mapRun(e.created_run), mapRun(e.updated_run));
         eventMap.set(e.id, Number(lastInsertRowid));
       }
