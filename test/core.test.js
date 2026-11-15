@@ -26,6 +26,26 @@ test('beclass parseList', () => {
   assert.equal(typeof withQuota.fields['名額上限'], 'number');
 });
 
+test('beclass parseList：2026-11 改版後的列表', () => {
+  const now = Date.parse('2026-11-15T12:00:00+08:00');
+  const { items, totalPages } = beclass.parseList(fixture('beclass-list-2026-11.html'), '', { now });
+  assert.equal(totalPages, 289);
+  assert.equal(items.length, 7);
+  const by = Object.fromEntries(items.map((i) => [i.sourceId, i]));
+  assert.equal(by['31528f46af0483063394'].name, '南投縣115年國際身心障礙者日宣導活動親子手作體驗報名');
+  assert.equal(by['31528f46af0483063394'].url, 'https://www.beclass.com/rid=31528f46af0483063394');
+  assert.deepEqual(by['31528f46af0483063394'].fields, { 活動日期: '2026-11-22', 剩餘天數: 1.5, 報名狀態: '報名中' });
+  assert.deepEqual(by['31528ef6ae990c0b3b26'].fields, { 報名狀態: '報名中' }); // 沒有日期
+  assert.equal(by['31528fb6af993d848059'].fields['活動日期'], '2027-01-09'); // 跨年：網站有寫年份
+  assert.equal(by['31528fb6af993d848059'].fields['剩餘天數'], 50.5);
+  assert.equal(by['31528f26aed53c70c2ad'].fields['剩餘天數'], 3); // 只有「還有 3 天」標籤
+  assert.equal(by['31528ed6ae6f3c0048d2'].fields['尚餘名額'], 8);
+  assert.equal(by['30527da6a8e5c932382f'].fields['報名狀態'], '已截止'); // 截止日已過
+  assert.equal(by['30527da6a8e5c9323999'].fields['報名狀態'], '已額滿');
+  // 名額上限改版後拿不到：列為會變的欄位，舊資料不會因此被當成「修改」
+  assert.ok(beclass.volatileFields.includes('名額上限'));
+});
+
 test('beclass parseDetail 抓到地點、類別、活動日期、說明', () => {
   const d = beclass.parseDetail(fixture('beclass-detail.html'));
   assert.match(d.name, /馬頭山/);
