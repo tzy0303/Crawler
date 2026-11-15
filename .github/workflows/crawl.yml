@@ -79,6 +79,11 @@ jobs:
           # 記下原本的筆數，存回前用來檢查資料有沒有被寫壞
           echo "BEFORE_COUNT=$([ -f db/crawler.db ] && node src/db-count.js db/crawler.db || echo 0)" >> "$GITHUB_ENV"
 
+      # 一次性資料修正（欄位改名等）要在抓取前做，否則新抓的資料會和還沒改名的舊資料比對，被當成「修改」
+      - name: 資料修正（抓取前）
+        if: hashFiles('db/crawler.db') != ''
+        run: node --disable-warning=ExperimentalWarning src/backfill.js
+
       - name: 抓取
         id: crawl
         continue-on-error: true

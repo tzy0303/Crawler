@@ -164,6 +164,7 @@ const MAIL_HTML = `<html><body><table>
 test('104 通知信：解析職缺、公司、地區、薪資、經歷、學歷', () => {
   const items = parseJobMail(MAIL_HTML, { date: '2026-11-01T01:00:00Z', subject: '104 職缺通知' });
   assert.equal(items.length, 2);
+  assert.ok(items.every((i) => i.fields['發送者'] === '系統')); // 104 系統自動寄的通知
   const [a, b] = items;
   assert.equal(a.name, '行銷企劃專員｜好棒棒股份有限公司');
   assert.equal(a.url, 'https://www.104.com.tw/job/7abcd');
@@ -365,7 +366,7 @@ test('104 企業邀請信：標籤一行、值一行的固定欄位；沒寫地�
   assert.equal(job.fields['薪資'], '月薪 50,000~70,000元');
   assert.equal(job.fields['工作地點'], '新北市板橋區文化路一段');
   assert.equal(job.fields['休假制度'], '週休二日');
-  assert.equal(job.fields['類型'], '企業邀請');
+  assert.equal(job.fields['發送者'], '企業');
 
   const noPlace = html.replace(/<tr><td>上班地點.*?文化路一段<\/td><\/tr>/, '');
   assert.equal(parseJobMail(noPlace, {})[0].fields['工作地點'], undefined);

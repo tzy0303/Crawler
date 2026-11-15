@@ -28,6 +28,13 @@ const MIGRATIONS = {
     db.prepare(`DELETE FROM event_history WHERE event_id IN (${bad})`).run();
     db.prepare(`DELETE FROM events WHERE id IN (${bad})`).run();
   },
+  // 「類型：企業邀請／職缺通知」改成「發送者：企業／系統」。直接改存的欄位（不動修改時間），
+  // 下次抓取時內容比對一致，不會被當成「修改」。workflow 在抓取前先跑一次 backfill，確保順序正確
+  '2026-11-15-mail104-sender': () => {
+    db.prepare(`UPDATE events SET fields_json = json_set(json_remove(fields_json, '$.類型'), '$.發送者',
+        CASE json_extract(fields_json, '$.類型') WHEN '企業邀請' THEN '企業' ELSE '系統' END)
+      WHERE site_id = 'mail104' AND json_extract(fields_json, '$.類型') IS NOT NULL`).run();
+  },
 };
 for (const [id, run] of Object.entries(MIGRATIONS)) {
   if (db.prepare('SELECT 1 FROM migrations WHERE id = ?').get(id)) continue;

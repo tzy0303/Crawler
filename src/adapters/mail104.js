@@ -157,7 +157,8 @@ export function parseJobMail(html, { date = null, subject = '' } = {}) {
       else if (!fields['工作地點'] && LOOKS_LIKE_PLACE.test(t.replace(/台/g, '臺'))) fields['工作地點'] = t;
       else if (!fields['公司'] && COMPANY_RE.test(t)) fields['公司'] = t;
     }
-    fields['類型'] = /詢問意願|邀請|面試/.test(subject) ? '企業邀請' : '職缺通知';
+    // 誰發的：企業主動寄（「【某公司】發給您的【詢問意願】」、面試邀請）或 104 系統自動配對（配對日報、職缺通知）
+    fields['發送者'] = /發給您的|詢問意願|邀請|面試/.test(subject) ? '企業' : '系統';
     if (mailDate) fields['通知日期'] = mailDate;
     if (subject) fields['信件主旨'] = clean(subject);
 
