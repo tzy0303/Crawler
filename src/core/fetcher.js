@@ -1,5 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { challengeError, isChallenge } from './challenge.js';
 
 // 誠實標明是爬蟲，不偽裝成瀏覽器；網站擋了就是擋了，不繞過
 export const UA = 'SiteUpdateWatcher/1.0';
@@ -83,14 +84,25 @@ export async function fetchHtml(url, { minInterval = 1000, retries = 3, encoding
     await throttle(minInterval);
     try {
       const res = await safeFetch(url, { 'User-Agent': UA, 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.5' });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+      if (!res.ok) {
+        // 403/429/503 常是驗證頁：看一下內容，是驗證就不重試
+        if ([403, 429, 503].includes(res.status)) {
+          const body = await readLimited(res).then((b) => new TextDecoder('utf-8').decode(b)).catch(() => '');
+          if (isChallenge(body, res.status)) throw challengeError(url);
+        }
+        throw new Error(`HTTP ${res.status} ${url}`);
+      }
       const buf = await readLimited(res);
       const enc = encoding === 'auto' ? detectEncoding(buf, res.headers.get('content-type')) : encoding;
+      let html;
       try {
-        return new TextDecoder(enc).decode(buf);
+        html = new TextDecoder(enc).decode(buf);
       } catch {
-        return new TextDecoder('utf-8').decode(buf);
+        html = new TextDecoder('utf-8').decode(buf);
       }
+      // 有些網站驗證頁回 200：不擋下來會被當成「這頁沒有資料」，安靜地結束
+      if (isChallenge(html, res.status)) throw challengeError(url);
+      return html;
     } catch (err) {
       if (err.fatal || attempt >= retries) throw err;
       await sleep(3000 * attempt);

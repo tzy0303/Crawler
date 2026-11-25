@@ -1,3 +1,4 @@
+import { challengeError, isChallenge } from './challenge.js';
 import { assertPublicUrl, throttle, UA } from './fetcher.js';
 
 /**
@@ -13,7 +14,6 @@ import { assertPublicUrl, throttle, UA } from './fetcher.js';
 
 const MAX_CHARS = 10 * 1024 * 1024;
 const SKIP_TYPES = new Set(['image', 'media', 'font']); // 用不到，省流量也比較快
-const CHALLENGE = /<title>\s*(Just a moment|Attention Required|請稍候|Access denied)|challenges\.cloudflare\.com|cf-chl-|captcha/i;
 
 let browserPromise = null;
 let contextPromise = null;
@@ -71,9 +71,15 @@ export async function fetchRendered(url, { minInterval = 1000, retries = 3, wait
       const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       // 等網路安靜下來（JavaScript 載完資料）；有些網站一直有追蹤請求，等不到就用目前的內容
       await page.waitForLoadState('networkidle', { timeout: waitMs }).catch(() => {});
-      const html = await page.content();
-      if (CHALLENGE.test(html.slice(0, 20000)) && (!res || res.status() >= 400 || html.length < 50000)) {
-        throw Object.assign(new Error(`網站要求驗證「是不是真人」，不繞過：${url}`), { fatal: true });
+      let html = await page.content();
+      const status = res ? res.status() : 0;
+      if (isChallenge(html, status)) {
+        // 有些網站先顯示幾秒「檢查中」，網站自己判斷通過後會換成正常頁面：只等它，不點、不解驗證碼
+        const challengeUrl = page.url();
+        await page.waitForURL((u) => u.href !== challengeUrl, { timeout: 15000 }).catch(() => {});
+        await page.waitForLoadState('networkidle', { timeout: waitMs }).catch(() => {});
+        html = await page.content();
+        if (isChallenge(html, status)) throw challengeError(url);
       }
       if (res && !res.ok()) throw new Error(`HTTP ${res.status()} ${url}`);
       if (html.length > MAX_CHARS) throw Object.assign(new Error(`頁面太大（超過 10 MB）${url}`), { fatal: true });

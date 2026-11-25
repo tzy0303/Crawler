@@ -74,8 +74,8 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
         html = await fetch(listUrl, fetchOpts);
       } catch (err) {
         // 列表頁被擋（403）而網站有官方 RSS 之類的備援 → 改用備援，只新增不判斷修改
-        if (page !== 1 || !adapter.fallback || !/HTTP 403/.test(err.message)) throw err;
-        log(`[${adapter.id}] 列表頁被拒（403），改讀官方 RSS：${adapter.fallback.url}`);
+        if (page !== 1 || !adapter.fallback || !(err.challenge || /HTTP 403/.test(err.message))) throw err;
+        log(`[${adapter.id}] 列表頁被拒（${err.challenge ? '要求真人驗證' : '403'}），改讀官方 RSS：${adapter.fallback.url}`);
         const items = adapter.fallback.parse(await fetch(adapter.fallback.url, fetchOpts));
         stats.pages = 1;
         for (const item of items) {
@@ -99,6 +99,8 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
         try {
           detail = adapter.parseDetail ? adapter.parseDetail(await fetch(item.url, fetchOpts), item.url) : { fields: {} };
         } catch (err) {
+          // 要求真人驗證：整個網站這次停下來，不要一頁頁去撞（已抓到的資料照樣保留）
+          if (err.challenge) throw err;
           // 詳細頁抓不到就跳過，避免只有列表欄位時被誤判成「修改」；下次再補
           stats.failedDetails++;
           itemLog(`[${adapter.id}]   詳細頁失敗：${item.name}：${err.message}`);

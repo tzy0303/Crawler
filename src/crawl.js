@@ -1,4 +1,5 @@
 // 用法：node src/crawl.js [--site beclass] [--skip beclass,xxx] [--pages N] [--full]
+import { appendFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { loadSites } from './adapters/index.js';
 import { config, log } from './config.js';
@@ -25,6 +26,7 @@ if (values.site && !sites.length) {
   process.exitCode = 1;
 }
 
+const blocked = [];
 for (const site of sites) {
   const pages = values.pages ? Number(values.pages) : undefined;
   try {
@@ -37,9 +39,12 @@ for (const site of sites) {
       browser: site.browser,
       ...site.options,
     });
-  } catch {
+  } catch (err) {
     process.exitCode = 1;
+    if (err.challenge) blocked.push(site.adapter.name ?? site.adapter.id);
   }
 }
+// 雲端：把「要求真人驗證」的網站交給通知步驟，Issue 裡寫清楚是哪個網站、為什麼
+if (blocked.length && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `blocked=${blocked.join('、')}\n`);
 if (sites.some((s) => s.browser)) await (await import('./core/browser.js')).closeBrowser();
 db.close();

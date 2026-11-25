@@ -29,6 +29,7 @@ jobs:
       contents: write   # 只用在「存回資料庫」推 data 分支
     outputs:
       crawl_outcome: ${{ steps.crawl.outcome }}
+      blocked: ${{ steps.crawl.outputs.blocked }}
       beclass_age_days: ${{ steps.merge.outputs.age_days }}
       quality: ${{ steps.quality.outputs.problems }}
     env:
@@ -218,11 +219,13 @@ jobs:
           DEPLOY_JOB: ${{ needs.deploy.result }}
           BECLASS_AGE: ${{ needs.crawl.outputs.beclass_age_days }}
           QUALITY: ${{ needs.crawl.outputs.quality }}
+          BLOCKED: ${{ needs.crawl.outputs.blocked }}
         run: |
           {
             date '+%F %T'
             [ "$CRAWL_JOB" != "success" ] && echo "- 抓取流程失敗（資料沒有更新）"
             [ "$CRAWL_STEP" = "failure" ] && echo "- 有網站抓取失敗（其他網站照常更新）"
+            [ -n "$BLOCKED" ] && echo "- ${BLOCKED}：網站要求真人驗證，這次已停止抓取（不繞過）。連續發生請考慮改用官方 RSS／通知信、減少頁數，或在 sites.json 停用"
             [ "$DEPLOY_JOB" != "success" ] && echo "- 網頁沒有發佈"
             [ "${BECLASS_AGE:-0}" -ge 3 ] && echo "- BeClass 已經 ${BECLASS_AGE} 天沒更新（家裡電腦沒開機，或同步失敗：看家裡電腦的 data/logs）"
             [ -n "$QUALITY" ] && printf '%s\n' "$QUALITY" | sed 's/^/- 資料品質：/'

@@ -657,3 +657,44 @@ test('104 通知信：「我要應徵」按鈕不是職缺；標題含「儲存�
   const items = parseJobMail(html, {});
   assert.deepEqual(items.map((i) => i.name), ['前端工程師', 'Product Developer (Linux Kernel 儲存系統軟體開發)']);
 });
+
+test('真人驗證頁：驗證頁判斷為是；正常大頁面帶 reCAPTCHA 表單不算', async () => {
+  const { isChallenge } = await import('../src/core/challenge.js');
+  assert.equal(isChallenge('<html><head><title>Just a moment...</title></head><body><script src="/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1"></script><div class="cf-turnstile"></div></body></html>', 403), true);
+  assert.equal(isChallenge('<html><title>請稍候</title><div class="g-recaptcha"></div></html>', 200), true);
+  const bigForm = `<html><title>活動報名</title><div class="g-recaptcha"></div>${'<p>活動內容</p>'.repeat(5000)}</html>`;
+  assert.equal(isChallenge(bigForm, 200), false);
+  assert.equal(isChallenge('<html><title>活動列表</title></html>', 200), false);
+});
+
+test('詳細頁遇到真人驗證：整個網站這次停下，不再抓後面的詳細頁，已抓的保留', async () => {
+  const { challengeError } = await import('../src/core/challenge.js');
+  const db = openDb(':memory:');
+  const list = fixture('beclass-list.html');
+  const items = beclass.parseList(list).items;
+  assert.ok(items.length >= 3);
+  let detailCalls = 0;
+  const fetch = async (url) => {
+    if (url.includes('ShowList')) return url.endsWith('page=1') ? list : '<html></html>';
+    detailCalls++;
+    if (detailCalls === 2) throw challengeError(url);
+    return fixture('beclass-detail.html');
+  };
+  await assert.rejects(runCrawl(db, beclass, { fetch, log: () => {}, maxPages: 1, initialPages: 1 }), (e) => e.challenge === true);
+  assert.equal(detailCalls, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM events').get().n, 1);
+  const run = db.prepare('SELECT status, error FROM crawl_runs ORDER BY id DESC LIMIT 1').get();
+  assert.equal(run.status, 'failed');
+  assert.match(run.error, /真人驗證/);
+});
+
+test('列表頁遇到真人驗證、網站有官方 RSS → 改讀 RSS', async () => {
+  const { challengeError } = await import('../src/core/challenge.js');
+  const db = openDb(':memory:');
+  const rss = `<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel>
+    <item><title><![CDATA[ RSS 活動 ]]></title><link>https://www.beclass.com/m/rid=xyz789</link><Date>2026-12-01</Date></item>
+  </channel></rss>`;
+  const fetch = async (url) => { if (url.endsWith('backend.php')) return rss; throw challengeError(url); };
+  const r = await runCrawl(db, beclass, { fetch, log: () => {} });
+  assert.equal(r.newCount, 1);
+});

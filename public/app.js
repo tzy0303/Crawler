@@ -329,7 +329,7 @@ async function loadSummary() {
   $('c_upd').textContent = summaryInfo.today_updated;
 }
 
-const failReason = (e = '') => /HTTP 40[13]|HTTP 429/.test(e) ? '網站拒絕存取' : /登入失敗/.test(e) ? '信箱登入失敗' : /HTTP 404/.test(e) ? '找不到網址' : '錯誤';
+const failReason = (e = '') => /真人驗證|真人」/.test(e) ? '網站要求真人驗證' : /HTTP 40[13]|HTTP 429/.test(e) ? '網站拒絕存取' : /登入失敗/.test(e) ? '信箱登入失敗' : /HTTP 404/.test(e) ? '找不到網址' : '錯誤';
 async function loadRuns() {
   const runs = await api(`/api/runs?site=${$('site').value}&limit=8`);
   lastRun = runs.find((r) => r.status === 'done') ?? null;
