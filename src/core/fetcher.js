@@ -1,8 +1,8 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+// 誠實標明是爬蟲，不偽裝成瀏覽器；網站擋了就是擋了，不繞過
+export const UA = 'SiteUpdateWatcher/1.0';
 const MAX_BYTES = 10 * 1024 * 1024; // 一頁最多 10 MB
 const MAX_REDIRECTS = 5;
 
@@ -29,7 +29,7 @@ export function isPrivateAddress(ip) {
   return v6 === '::' || v6 === '::1' || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6) || /^ff/.test(v6);
 }
 
-async function assertPublicUrl(url) {
+export async function assertPublicUrl(url) {
   if (!/^https?:$/.test(url.protocol)) throw Object.assign(new Error(`只能抓 http/https 網址：${url.href}`), { fatal: true });
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
@@ -70,12 +70,17 @@ function detectEncoding(buf, contentType) {
   return head.match(/<meta[^>]+charset=["']?([\w-]+)/i)?.[1] ?? 'utf-8';
 }
 
+/** 全域速率限制：一般抓取和瀏覽器抓取共用，預設每秒 1 頁 */
+export async function throttle(minInterval = 1000) {
+  const wait = lastRequestAt + minInterval - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastRequestAt = Date.now();
+}
+
 /** 抓 HTML：全域速率限制（預設每秒 1 個請求）+ 重試；encoding 預設自動判斷 */
 export async function fetchHtml(url, { minInterval = 1000, retries = 3, encoding = 'auto' } = {}) {
   for (let attempt = 1; ; attempt++) {
-    const wait = lastRequestAt + minInterval - Date.now();
-    if (wait > 0) await sleep(wait);
-    lastRequestAt = Date.now();
+    await throttle(minInterval);
     try {
       const res = await safeFetch(url, { 'User-Agent': UA, 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.5' });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);

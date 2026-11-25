@@ -111,12 +111,12 @@ const wrapDb = { prepare: (sql) => ({
   get(...args) { return this.all(...args)[0]; },
 }) };
 
-const CFG_KEYS = ['listUrl', 'linkPattern', 'fetchDetail', 'titleSelector', 'contentSelector', 'trackDescription', 'volatileFields', 'maxPages', 'initialPages', 'encoding', 'defaultLocation'];
+const CFG_KEYS = ['listUrl', 'linkPattern', 'fetchDetail', 'titleSelector', 'contentSelector', 'trackDescription', 'volatileFields', 'maxPages', 'initialPages', 'encoding', 'defaultLocation', 'browser'];
 function cleanCfg(b) {
   const c = {};
   for (const k of CFG_KEYS) if (b[k] !== undefined && b[k] !== '') c[k] = b[k];
   if (!/^https?:\/\//i.test(c.listUrl ?? '')) throw fail('列表網址需以 http:// 或 https:// 開頭');
-  c.fetchDetail = c.fetchDetail !== false; c.trackDescription = !!c.trackDescription;
+  c.fetchDetail = c.fetchDetail !== false; c.trackDescription = !!c.trackDescription; c.browser = c.browser === true;
   c.volatileFields = [].concat(c.volatileFields ?? []).filter(Boolean);
   c.maxPages = Math.min(Math.max(Number(c.maxPages) || 5, 1), 100);
   return c;
@@ -442,7 +442,7 @@ function resetForm() {
   $('formTitle').textContent = '新增網站';
   for (const k of ['name', 'listUrl', 'linkPattern', 'titleSelector', 'contentSelector', 'defaultLocation']) $(`sf_${k}`).value = '';
   $('sf_volatile').value = '';
-  $('sf_maxPages').value = 5; $('sf_fetchDetail').checked = true; $('sf_trackDescription').checked = false; $('sf_encoding').value = 'auto';
+  $('sf_maxPages').value = 5; $('sf_fetchDetail').checked = true; $('sf_trackDescription').checked = false; $('sf_browser').checked = false; $('sf_encoding').value = 'auto';
   $('sf_msg').innerHTML = '';
 }
 
@@ -451,7 +451,7 @@ function formConfig() {
     name: $('sf_name').value.trim(), listUrl: $('sf_listUrl').value.trim(), linkPattern: $('sf_linkPattern').value.trim(),
     maxPages: Number($('sf_maxPages').value) || 5, fetchDetail: $('sf_fetchDetail').checked,
     titleSelector: $('sf_titleSelector').value.trim(), contentSelector: $('sf_contentSelector').value.trim(),
-    trackDescription: $('sf_trackDescription').checked, encoding: $('sf_encoding').value,
+    trackDescription: $('sf_trackDescription').checked, browser: $('sf_browser').checked, encoding: $('sf_encoding').value,
     defaultLocation: $('sf_defaultLocation').value.trim(),
     volatileFields: $('sf_volatile').value.split(/[,，、]/).map((x) => x.trim()).filter(Boolean),
   };
@@ -487,6 +487,7 @@ $('siteTbl').onclick = async (ev) => {
     for (const k of ['listUrl', 'linkPattern', 'titleSelector', 'contentSelector', 'maxPages', 'defaultLocation']) $(`sf_${k}`).value = s.config[k] ?? (k === 'maxPages' ? 5 : '');
     $('sf_fetchDetail').checked = s.config.fetchDetail !== false;
     $('sf_trackDescription').checked = !!s.config.trackDescription;
+    $('sf_browser').checked = s.config.browser === true;
     $('sf_encoding').value = s.config.encoding || 'auto';
     $('sf_volatile').value = (s.config.volatileFields ?? []).join(', ');
     $('formTitle').scrollIntoView({ behavior: 'smooth' });

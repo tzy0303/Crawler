@@ -27,6 +27,7 @@ export function loadSites(config) {
       enabled: !!c.enabled && adapter.configured !== false,
       maxPages: c.maxPages ?? 30,
       initialPages: c.initialPages ?? 20,
+      browser: c.browser === true, // 用真的瀏覽器抓（src/core/browser.js）
       options: { sinceDays: c.sinceDays, initialDays: c.initialDays },
     };
   });
@@ -41,6 +42,7 @@ export function loadSites(config) {
         enabled: cfg.enabled !== false,
         maxPages: cfg.maxPages ?? 5,
         initialPages: cfg.initialPages ?? cfg.maxPages ?? 5,
+        browser: cfg.browser === true,
         options: {},
       });
     } catch (err) {

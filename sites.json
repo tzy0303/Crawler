@@ -8,6 +8,21 @@
     "trackDescription": false,
     "volatileFields": [],
     "maxPages": 5,
-    "encoding": "auto"
+    "encoding": "auto",
+    "browser": true
+  },
+  {
+    "id": "104-web",
+    "name": "104 職缺（網頁）",
+    "enabled": false,
+    "listUrl": "https://www.104.com.tw/jobs/search/?page={page}",
+    "fetchDetail": true,
+    "trackDescription": false,
+    "volatileFields": [
+      "應徵人數"
+    ],
+    "maxPages": 3,
+    "encoding": "auto",
+    "browser": true
   }
 ]

@@ -70,16 +70,16 @@ export default {
   // 本次看到篇數每次不同，不算更新；最新一篇換了才算
   volatileFields: ['本次看到篇數'],
 
-  async collect({ isFirstRun, maxPages = 2, initialPages = 2, log }) {
+  async collect({ isFirstRun, maxPages = 2, initialPages = 2, log, fetch = fetchHtml }) {
     const pages = isFirstRun ? initialPages : maxPages;
     const urls = new Set();
     for (let page = 1; page <= pages; page++) {
-      for (const u of articleLinks(await fetchHtml(`${BASE}/articles?tab=tech&page=${page}`))) urls.add(u);
+      for (const u of articleLinks(await fetch(`${BASE}/articles?tab=tech&page=${page}`))) urls.add(u);
     }
     const articles = [];
     for (const url of urls) {
       try {
-        articles.push(parseArticle(await fetchHtml(url), url));
+        articles.push(parseArticle(await fetch(url), url));
       } catch (err) {
         log?.(`[ithelp] 文章讀取失敗：${err.message}`);
       }

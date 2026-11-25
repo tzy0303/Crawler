@@ -50,6 +50,10 @@ jobs:
       # 程式有問題就不要抓、不要發佈（失敗會開 Issue 通知）
       - run: npm test
 
+      # sites.json 設 "browser": true 的網站用真的瀏覽器抓：用 ubuntu-latest 內建的 Chrome（playwright-core 不另外下載瀏覽器）
+      - name: 確認瀏覽器
+        run: google-chrome --version
+
       - name: 取回資料庫（data 分支）
         env:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}

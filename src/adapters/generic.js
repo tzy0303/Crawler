@@ -10,6 +10,7 @@ import { labelValues, toLines } from '../core/extract.js';
  *   fetchDetail: true,                          // 進詳細頁抓欄位
  *   titleSelector, contentSelector,             // 選填 CSS 選擇器
  *   trackDescription: false,                    // 內文變動也算修改
+ *   browser: false,                             // true = 用真的瀏覽器抓（內容要等 JavaScript 才出現的網站）
  *   volatileFields: [], maxPages, initialPages, encoding
  * }
  */
@@ -226,6 +227,7 @@ export function createGenericAdapter(cfg) {
     volatileFields: cfg.volatileFields ?? [],
     defaultLocation: cfg.defaultLocation || null, // 所有活動都在同一處的網站（例如華山）
     encoding: cfg.encoding || 'auto',
+    browser: cfg.browser === true, // 內容要等 JavaScript 跑完才出現的網站：用真的瀏覽器抓（src/core/browser.js）
 
     listUrl(page) {
       if (paged) return cfg.listUrl.replaceAll('{page}', String(page));

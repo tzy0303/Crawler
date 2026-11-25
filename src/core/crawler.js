@@ -17,7 +17,9 @@ const ON_CI = !!process.env.GITHUB_ACTIONS;
  *  adapter 有 collect()（例如讀通知信）時：一次取得所有項目，不翻頁
  */
 export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, full = false, trigger = 'manual',
-  log = console.log, fetch = fetchHtml, ...sourceOpts } = {}) {
+  log = console.log, fetch: fetchOverride, browser = adapter.browser, ...sourceOpts } = {}) {
+  // 設定 browser: true 的網站用真的瀏覽器抓；用到才載入，其他網站不需要 Chrome
+  const fetch = fetchOverride ?? (browser ? (await import('./browser.js')).fetchRendered : fetchHtml);
   ensureSite(db, adapter);
   const isFirstRun = !db.prepare('SELECT 1 FROM events WHERE site_id = ? LIMIT 1').get(adapter.id);
   const pageLimit = full ? Infinity : isFirstRun ? initialPages : maxPages;
@@ -48,7 +50,7 @@ export async function runCrawl(db, adapter, { maxPages = 30, initialPages = 20, 
 
   try {
     if (adapter.collect) {
-      const items = await adapter.collect({ isFirstRun, log, maxPages, initialPages, ...sourceOpts });
+      const items = await adapter.collect({ isFirstRun, log, maxPages, initialPages, fetch, ...sourceOpts });
       stats.pages = 1;
       for (const item of items) {
         const key = normalizeName(item.name);

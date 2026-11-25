@@ -34,10 +34,12 @@ for (const site of sites) {
       full: values.full,
       trigger: 'cli',
       log,
+      browser: site.browser,
       ...site.options,
     });
   } catch {
     process.exitCode = 1;
   }
 }
+if (sites.some((s) => s.browser)) await (await import('./core/browser.js')).closeBrowser();
 db.close();
