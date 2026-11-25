@@ -14,7 +14,7 @@
   {
     "id": "104-web",
     "name": "104 職缺（網頁）",
-    "enabled": true,
+    "enabled": false,
     "listUrl": "https://www.104.com.tw/jobs/search/?page={page}",
     "fetchDetail": true,
     "trackDescription": false,
