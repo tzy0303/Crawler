@@ -665,6 +665,11 @@ test('真人驗證頁：驗證頁判斷為是；正常大頁面帶 reCAPTCHA 表
   const bigForm = `<html><title>活動報名</title><div class="g-recaptcha"></div>${'<p>活動內容</p>'.repeat(5000)}</html>`;
   assert.equal(isChallenge(bigForm, 200), false);
   assert.equal(isChallenge('<html><title>活動列表</title></html>', 200), false);
+  // 104 實際的驗證頁：403、幾 KB、cf_chl_opt
+  assert.equal(isChallenge('<html><title>Just a moment...</title><script>window._cf_chl_opt={cvId:"3"};</script><script src="https://challenges.cloudflare.com/x.js"></script></html>', 403), true);
+  // iThome 實際的文章頁：47 KB 正常內容，留言區載入 Turnstile → 不算
+  const article = `<html><title>文章 - iT 邦幫忙</title><script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>${'<p>內容</p>'.repeat(4000)}</html>`;
+  assert.equal(isChallenge(article, 200), false);
 });
 
 test('詳細頁遇到真人驗證：整個網站這次停下，不再抓後面的詳細頁，已抓的保留', async () => {

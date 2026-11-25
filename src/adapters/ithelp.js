@@ -81,6 +81,7 @@ export default {
       try {
         articles.push(parseArticle(await fetch(url), url));
       } catch (err) {
+        if (err.challenge) throw err; // 要求真人驗證：整個網站停，不一篇篇去撞
         log?.(`[ithelp] 文章讀取失敗：${err.message}`);
       }
     }
