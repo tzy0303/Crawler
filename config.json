@@ -17,7 +17,8 @@
     "ithelp": {
       "enabled": true,
       "maxPages": 2,
-      "initialPages": 2
+      "initialPages": 2,
+      "browser": true
     }
   }
 }
